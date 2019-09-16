@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>TQL1</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/mocha/mocha.css" />
+</head>
+<body>
+<div id="mocha"></div>
+
+<script src="https://unpkg.com/chai/chai.js"></script>
+<script src="https://unpkg.com/mocha/mocha.js"></script>
+
+<script class="mocha-init">
+    mocha.setup('bdd');
+    mocha.checkLeaks();
+</script>
+
+<script src="tql1.js"></script>
+<script>
+describe('TQL1 matches expected', function () {
+    [
+        {
+            c: 'First Example',
+            d: Float64Array.of(0, 0, 0, 0, 0),            
+            e: Float64Array.of(1, 1, 1, 1, 0),
+            f: 'qExY6Hq2+78AAAAAAADwv1o7W0dwLcE8////////7z+mTFjoerb7Pw==',
+        },
+        {
+            c: 'Second Example',
+            d: Float64Array.from({ length: 21 }, (_, i) => 10 - i),
+            e: Float64Array.from({ length: 21 }, () => 1),
+            f: 'GBL4KQ1+JcCThVgS3msiwA3IIxfwEyDAOc5o/gsEHMD3DiQpOwAYwA7vhCMCABTAWBXDDQAAEMCg2IIAAAAIwEDfAQAAAADA8woAAAAA8L8q7LW2RbQNPQgLAAAAAPA/WN8BAAAAAECt2IIAAAAIQFcVww0AABBAFO+EIwIAFEAFDyQpOwAYQETOaP4LBBxAF8gjF/ATIECchVgS3msiQBwS+CkNfiVA',
+        },
+        {
+            c: 'Third Example',
+            d: Float64Array.from({ length: 21 }, (_, i) => Math.abs(10 - i)),
+            e: Float64Array.from({ length: 21 }, () => 1),
+            f: 'ZA0x+M4B8r9Sv/3AWj7QP/X6C5gzUu4/AsI9bQ+h/D+7ZZYhqwoBQAvd6KM/sAdAqtogcURYCEBVdZEe6PcPQFMjkWF1BBBAFRRU+sb/E0DkjhUTQAAUQOnrqwU5ABhAOgCYWT0AGEBVRbfwCwQcQL6wSgwMBBxAu8gFF/ATIEBUCkIX8BMgQMFHWBLeayJAz8NYEt5rIkAIEvgpDX4lQDAS+CkNfiVA',
+        },
+        {
+            c: 'Fourth Example',
+            d: Float64Array.from({ length: 21 }, (_, i) => i > 3 || i < 17 ? 5 : 0),
+            e: Float64Array.from({ length: 21 }, () => 1),
+            f: 'id7j/bApCEDWVxmy6qUIQPjpiLglcglApIdNvDmKCkCw62Iic+gLQL5TRMCwhQ1A+1OiA4lZD0CpHcfkOq0QQEkuUQADvxFAtAu/CYrcEkAAAAAAAAAUQE70QPZ1IxVAtdGu//xAFkBU4jgbxVIXQALWLn47UxhAINbdnyc9GUAois5uxgsaQC882SHjuhpAA4u7I+1GG0AVVPOmCq0bQLoQDoEn6xtA',
+        },
+    ].forEach(({ c, d, e, f }) => {
+        it(c, function () {
+            const rc = tql1(d, e);
+            const g = btoa(String.fromCharCode(...new Uint8Array(d.buffer)));
+            // to convert back to Float64Array, use
+            // const b = atob(f);
+            // const c = Uint8Array.from(b, s => s.charCodeAt(0));
+            // const g = new Float64Array(c.buffer);
+            chai.expect(rc).to.be.equal(0);
+            chai.expect(f).to.be.equal(g);
+        });        
+    });
+});
+</script>
+<script class="mocha-exec">
+    mocha.run();
+</script>
+</body>
+</html>
