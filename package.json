@@ -6,8 +6,11 @@
     "build": "gulp --gulpfile ./build.ts"
   },
   "devDependencies": {
+    "@types/gulp": "^4.0.6",
     "@wasm/studio-utils": "*",
-    "gulp": "~3.9.1",
+    "express": "^4.17.1",
+    "gulp": "^4.0.2",
+    "morgan": "^1.9.1",
     "ts-node": "~5.0.0",
     "typescript": "~2.7.2"
   },
