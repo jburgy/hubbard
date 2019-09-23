@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Lattice</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://unpkg.com/mocha/mocha.css" />
+</head>
+<body>
+<div id="mocha"></div>
+
+<script src="https://unpkg.com/chai/chai.js"></script>
+<script src="https://unpkg.com/mocha/mocha.js"></script>
+
+<script class="mocha-init">
+    mocha.setup('bdd');
+    mocha.checkLeaks();
+</script>
+
+<script src="lattice.js"></script>
+<script>
+describe('Square lattice nearest neighbors', function () {
+    it('Works with 20 sites', function () {
+        // Figure 3 in https://arxiv.org/abs/1711.11418
+        const expected = [
+            [14,  8,  1, 19], [ 2, 13,  5,  0], [ 3,  1,  6, 14], [18,  2,  7, 15], [ 5, 17,  9, 13],
+            [ 6,  4, 10,  1], [ 7,  5, 11,  2], [ 8,  6, 12,  3], [ 0,  7, 13, 18], [10, 19, 14,  4],
+            [11,  9, 15,  5], [12, 10, 16,  6], [13, 11, 17,  7], [ 1, 12,  4,  8], [15,  0,  2,  9],
+            [16, 14,  3, 10], [17, 15, 18, 11], [ 4, 16, 19, 12], [19,  3,  8, 16], [ 9, 18,  0, 17],
+        ];
+        chai.expect(neighbors(4, 2)).to.deep.equal(expected);
+    });
+
+    it('Works with 40 sites', function () {
+        // http://helper.ipam.ucla.edu/publications/qs2009/qs2009_8379.pdf
+        const expected = [
+            [31, 10,  1, 39], [ 2, 17,  5,  0], [ 3,  1,  6, 31], [ 4,  2,  7, 32], [37,  3,  8, 33], 
+            [ 6, 24, 12,  1], [ 7,  5, 13,  2], [ 8,  6, 14,  3], [ 9,  7, 15,  4], [10,  8, 16, 37],
+            [ 0,  9, 17, 38], [12, 30, 18, 24], [13, 11, 19,  5], [14, 12, 20,  6], [15, 13, 21,  7],
+            [16, 14, 22,  8], [17, 15, 23,  9], [ 1, 16, 24, 10], [19, 36, 25, 11], [20, 18, 26, 12],
+            [21, 19, 27, 13], [22, 20, 28, 14], [23, 21, 29, 15], [24, 22, 30, 16], [ 5, 23, 11, 17],
+            [26, 39, 31, 18], [27, 25, 32, 19], [28, 26, 33, 20], [29, 27, 34, 21], [30, 28, 35, 22],
+            [11, 29, 36, 23], [32,  0,  2, 25], [33, 31,  3, 26], [34, 32,  4, 27], [35, 33, 37, 28],
+            [36, 34, 38, 29], [18, 35, 39, 30], [38,  4,  9, 34], [39, 37, 10, 35], [25, 38,  0, 36],
+        ];
+        chai.expect(neighbors(6, 2)).to.deep.equal(expected);
+    });
+});
+</script>
+<script class="mocha-exec">
+    mocha.run();
+</script>
+</body>
+</html>
