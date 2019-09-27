@@ -139,4 +139,7 @@
   end
   get_local $mask
   get_local $n
-  i32.shl))           ;; return mask << n
+  i32.shl)            ;; return mask << n
+(func $count (export "count") (type $tindex) (param $mask i32) (result i32)
+  get_local $mask
+  i32.popcnt))

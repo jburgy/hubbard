@@ -21,6 +21,14 @@
 <script src="lattice.js"></script>
 <script>
 describe('Square lattice nearest neighbors', function () {
+    it('Works with 8 sites', function () {
+        const expected = [
+            [4, 6, 2, 7], [2, 7, 4, 6], [3, 1, 5, 0], [7, 2, 6, 4],
+            [5, 0, 3, 1], [6, 4, 7, 2], [0, 5, 1, 3], [1, 3, 0, 5],
+        ];
+        chai.expect(neighbors(2, 2)).to.deep.equal(expected);
+    });
+
     it('Works with 20 sites', function () {
         // Figure 3 in https://arxiv.org/abs/1711.11418
         const expected = [

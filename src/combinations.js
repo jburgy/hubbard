@@ -1,5 +1,5 @@
 WebAssembly.instantiateStreaming(fetch("../out/combinations.wasm"))
-.then(({ instance: { exports: { index, mask } } }) => {
+.then(({ instance: { exports: { index, mask, count } } }) => {
     function generate(N, K) {
         const NCK = index(((1 << K) - 1) << (N - K)) + 1;
         const n = N - 1;
@@ -26,6 +26,10 @@ WebAssembly.instantiateStreaming(fetch("../out/combinations.wasm"))
             const realized = generate(8, 5);
             chai.expect(realized).to.deep.equal(expected);
         });
+
+        it('count(0b10101010) === 4', function () {
+            chai.expect(count(0b10101010)).to.be.equal(4);
+        })
     });
 
     mocha.run();
