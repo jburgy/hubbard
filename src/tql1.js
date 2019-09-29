@@ -38,7 +38,7 @@
  * @returns {number} m - number of eigenvalues which could be determined
  *                       in 30 iterations or fewer
  */
-function tql1(d, e) {
+export default function tql1(d, e) {
     const { length: n } = d;
     let f = 0;
     let test = 0;
