@@ -18,8 +18,9 @@
     mocha.checkLeaks();
 </script>
 
-<script src="lattice.js"></script>
-<script>
+<script type="module">
+import neighbors from './lattice.js';
+
 describe('Square lattice nearest neighbors', function () {
     it('Works with 8 sites', function () {
         const expected = [
@@ -56,7 +57,7 @@ describe('Square lattice nearest neighbors', function () {
     });
 });
 </script>
-<script class="mocha-exec">
+<script type="module" class="mocha-exec">
     mocha.run();
 </script>
 </body>

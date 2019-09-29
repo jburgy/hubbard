@@ -10,7 +10,7 @@
  * @param {number} v - height of Bravais vector
  * @returns {number[][]} -  result[i][j] is jth neighbor of ith site
  */
-function neighbors(u, v) {
+export default function neighbors(u, v) {
     const e = u * u + v * v;
     const reflect = (x, y) => {
         while (u * x + v * y < 0) {

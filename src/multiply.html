@@ -273,19 +273,15 @@ produce a vector containing 4 &times; <var>U</var> at index 0, <var>-t</var> at 
     mocha.setup('bdd');
     mocha.checkLeaks();
 </script>
-<script src="lattice.js"></script>
-<script src="multiply.js"></script>
-<script class="mocha-exec">
-WebAssembly.instantiateStreaming(fetch("../out/combinations.wasm"))
-.then(({ instance: { exports: { index, mask, count } } }) => {
-    Object.assign(window, { index, mask, count });
+<script type="module">
+    import hubbard from './multiply.js';
+
     describe('Hubbard model application', function () {
-        before('Setup state', function () {
-            this.pairs = neighbors(2, 2)
-                .flatMap((x, i) => x.filter((_, i) => !(i & 1)).map(j => (1 << i) | (1 << j)));
+        before('Setup state', async function () {
+            this.hubbard = await hubbard(/* N = */ 8, /* K = */ 4, /* u = */ 2, /* v = */ 2);
         });
         it('Multiply once', function () {
-            const nCk = index(0b11110000) + 1;
+            const nCk = 70;
             const t = 1;
             const U = 2;
             const expected = [U * 4];
@@ -293,11 +289,11 @@ WebAssembly.instantiateStreaming(fetch("../out/combinations.wasm"))
                 expected[i] = -t;
                 expected[nCk * i] = -t;
             });
-            const realized = multiply(8, 4, nCk, this.pairs, t, U, [1]);
+            const realized = this.hubbard(t, U, [1]);
             chai.expect(realized).to.deep.equal(expected);
         })
     });
+</script>
+<script type="module" class="mocha-exec">
     mocha.run();
-})
-.catch(console.error);
 </script>
