@@ -15,7 +15,6 @@ export default function diagonalize(N, K, u, v, t, U, steps) {
         .then((multiply) => {
             const nCk = binom(N, K);
             const dimension = nCk * nCk;
-            debugger;
             const buffer = lanczos(dimension, steps, (x, y) => multiply(t, U, x, y))
 
             const d = new Float64Array(buffer, 0, steps);
