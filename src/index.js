@@ -10,16 +10,37 @@ function binom(n, k) {
     return res | 0;
 }
 
-export default function diagonalize(N, K, u, v, t, U, steps) {
-    return hubbard(N, K, u, v)
-        .then((multiply) => {
-            const nCk = binom(N, K);
-            const dimension = nCk * nCk;
-            const buffer = lanczos(dimension, steps, (x, y) => multiply(t, U, x, y))
+const cache = {};
+const steps = 100;
 
-            const d = new Float64Array(buffer, 0, steps);
-            const e = new Float64Array(buffer, steps * Float64Array.BYTES_PER_ELEMENT, steps);
-            tql1(d, e);
-            return d;
-        });
+function parameters(document) {
+    return Object.fromEntries(Array.from(document
+        .querySelectorAll('fieldset#model > input'), ({ id, valueAsNumber }) => [id, valueAsNumber]));
+}
+
+function geometry(document) {
+    const { valueAsNumber: k } = document.querySelector('fieldset#geometry > input#k');
+    const { list, value, valueAsNumber: n } = document.querySelector('fieldset#geometry > input#n');
+    const { dataset: { u, v } } = list.querySelector(`option[value="${value}"]`);
+
+    return { u: parseInt(u), v: parseInt(v), n, k };
+}
+
+export default function callback(document) {
+    const { n, k, u, v } = geometry(document);
+    const key = (n << 8) | k;
+    if (!(key in cache)) {
+        cache[key] = hubbard(n, k, u, v);
+    }
+    return cache[key].then((multiply) => {
+        const { t, U } = parameters(document);
+        const nCk = binom(n, k);
+        const dimension = nCk * nCk;
+        const buffer = lanczos(dimension, steps, (x, y) => multiply(t, U, x, y))
+
+        const d = new Float64Array(buffer, 0, steps);
+        const e = new Float64Array(buffer, steps * Float64Array.BYTES_PER_ELEMENT, steps);
+        tql1(d, e);
+        return d;
+    });
 }

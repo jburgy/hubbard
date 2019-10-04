@@ -5,11 +5,96 @@
     <title>Exact Diagonalization</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; }
+        #ui {
+            display: grid;
+            width: 100%;
+            height: 250px;
+            grid-template-areas: "head head"
+                                 "nav  main"
+                                 "nav foot";
+            grid-template-rows: 50px 1fr 30px;
+            grid-template-columns: 256px 1fr;
+        }
+        #ui > header { grid-area: head; }
+        #ui > nav { grid-area: nav; }
+        #ui > main { grid-area: main; }
+        #ui > footer { grid-area: foot; }
+        input[type="range"]::-webkit-slider-thumb { cursor: pointer; }
+    </style>
 </head>
+<body>
+    <section id="ui">
+        <header>
+            <h2>Exact diagonalization</h2>
+        </header>
+        <nav>
+            <form>                
+                <fieldset id="model">
+                    <legend>Model parameters</legend>
+                    <label for="t">hopping integral <var>(t)</var>:</label>
+                    <output for="t"></output>
+                    <input type="range" id="t" min="0" max="4" step="0.2">
+                    <br>
+                    <label for="U">on-site interaction <var>(U)</var>:</label>
+                    <output for="U"></output>
+                    <input type="range" id="U" min="0" max="10" step="0.5">
+                </fieldset>
+                <fieldset id="geometry">
+                    <legend>Lattice geometry</legend>
+                    <label for="n"># of sites (<var>n</var>):</label>
+                    <output for="n"></output>
+                    <input type="range" id="n" min="8" max="32" value="8" list="lattices">
+                    <datalist id="lattices">
+                        <option data-u="2" data-v="2" value="8"></option>
+                        <option data-u="3" data-v="0" value="9"></option>
+                        <option data-u="3" data-v="1" value="10"></option>
+                        <option data-u="3" data-v="2" value="13"></option>
+                        <option data-u="4" data-v="0" value="16"></option>
+                        <option data-u="4" data-v="1" value="17"></option>
+                        <option data-u="3" data-v="3" value="18"></option>
+                        <option data-u="4" data-v="2" value="20"></option>
+                        <option data-u="5" data-v="0" value="25"></option>
+                        <option data-u="5" data-v="1" value="26"></option>
+                        <option data-u="5" data-v="2" value="29"></option>
+                        <option data-u="4" data-v="4" value="32"></option>
+                    </datalist>
+                    <br>
+                    <label for="k"># of pairs (<var>k</var>):</label>
+                    <output for="k"></output>
+                    <input type="range" id="k" min="1" max="7">
+                </fieldset>
+            </form>
+        </nav>
+        <main></main>
+        <footer></footer>
+    </section>
+</body>
 <script type="module">
     import diagonalize from './index.js';
 
-    diagonalize(8, 4, 2, 2, 1.0, 2.0, 100)
-        .then(console.log)
+    document.addEventListener('DOMContentLoaded', ({ target: { readyState } }) => {
+        const callback = () => diagonalize(document).then(console.log);
+        document.querySelectorAll('input').forEach((input) => {
+            const output = document.querySelector(`output[for="${input.id}"]`);
+            const oninput = () => { output.value = input.label || input.value };
+            input.addEventListener('input', oninput, { passive: true });
+            input.addEventListener('input', callback, { passive: true });
+            oninput();
+        });
+
+        const kin = document.querySelector('input#k');
+        document.querySelector('input#n')
+            .addEventListener('input', ({ target: { valueAsNumber } }) => {
+                const { valueAsNumber: old } = kin;
+                kin.max = `${valueAsNumber - 1}`;
+                if (kin.valueAsNumber !== old) {
+                    kin.dispatchEvent(new Event('input'));
+                }
+            }, { passive: true });
+        callback();
+    });
 </script>
 </html>
