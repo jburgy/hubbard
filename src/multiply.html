@@ -278,7 +278,7 @@ produce a vector containing 4 &times; <var>U</var> at index 0, <var>-t</var> at 
 
     describe('Hubbard model application', function () {
         before('Setup state', async function () {
-            this.hubbard = await hubbard(/* N = */ 8, /* K = */ 4, /* u = */ 2, /* v = */ 2);
+            this.hubbard = await hubbard(/* N = */ 8, /* K = */ 4);
         });
         it('Multiply once', function () {
             const nCk = 70;

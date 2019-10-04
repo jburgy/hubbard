@@ -29,7 +29,7 @@ function multiply(nCk, mask, index, count, hops, t, U, x, y) {
     });
 }
 
-export default function hubbard(N, K, u, v) {
+export default function hubbard(N, K) {
     return WebAssembly
         .instantiateStreaming(fetch('../out/combinations.wasm'))
         .then(({ instance: { exports: { index, mask, count } } }) => {
@@ -38,7 +38,7 @@ export default function hubbard(N, K, u, v) {
             const k = K;
             const mask$ = i => mask(i, n, k, nCk);
 
-            const hops = neighbors(u, v)
+            const hops = neighbors(N)
                 .flatMap((x, i) => x.filter((_, i) => !(i & 1)).map(j => (1 << i) | (1 << j)));
 
             return (t, U, x, y) => multiply(nCk, mask$, index, count, hops, t, U, x, y);

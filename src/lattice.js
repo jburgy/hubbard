@@ -1,3 +1,5 @@
+const squares = Array.from({ length: 8 }, (_, i) => i * i);
+
 /**
  * Indices of 4 nearest neighbors of lattice contained in square
  * with base (u, v).
@@ -6,11 +8,12 @@
  *   0 <= u * x + v * y < u * u + v * v
  *   0 <= u * y - v * x < u * u + v * v
  * 
- * @param {number} u - length of Bravais vector
- * @param {number} v - height of Bravais vector
+ * @param {number} n - number of sites
  * @returns {number[][]} -  result[i][j] is jth neighbor of ith site
  */
-export default function neighbors(u, v) {
+export default function neighbors(n) {
+    const v = squares.findIndex(w => squares.includes(n - w));
+    const u = squares.indexOf(n - v * v);
     const e = u * u + v * v;
     const reflect = (x, y) => {
         while (u * x + v * y < 0) {

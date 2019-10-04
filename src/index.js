@@ -10,30 +10,22 @@ function binom(n, k) {
     return res | 0;
 }
 
-const cache = {};
+const cache = [];
 const steps = 100;
 
-function parameters(document) {
+function parameters(document, selectors) {
     return Object.fromEntries(Array.from(document
-        .querySelectorAll('fieldset#model > input'), ({ id, valueAsNumber }) => [id, valueAsNumber]));
-}
-
-function geometry(document) {
-    const { valueAsNumber: k } = document.querySelector('fieldset#geometry > input#k');
-    const { list, value, valueAsNumber: n } = document.querySelector('fieldset#geometry > input#n');
-    const { dataset: { u, v } } = list.querySelector(`option[value="${value}"]`);
-
-    return { u: parseInt(u), v: parseInt(v), n, k };
+        .querySelectorAll(selectors), ({ id, valueAsNumber }) => [id, valueAsNumber]));
 }
 
 export default function callback(document) {
-    const { n, k, u, v } = geometry(document);
+    const { n, k } = parameters(document, 'fieldset#geometry > input');
     const key = (n << 8) | k;
     if (!(key in cache)) {
-        cache[key] = hubbard(n, k, u, v);
+        cache[key] = hubbard(n, k);
     }
     return cache[key].then((multiply) => {
-        const { t, U } = parameters(document);
+        const { t, U } = parameters(document, 'fieldset#model > input');
         const nCk = binom(n, k);
         const dimension = nCk * nCk;
         const buffer = lanczos(dimension, steps, (x, y) => multiply(t, U, x, y))
