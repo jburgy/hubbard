@@ -1,4 +1,7 @@
 const squares = Array.from({ length: 8 }, (_, i) => i * i);
+export const sizes = Array
+    .from({ length: 32 }, (_, i) => i + 1)
+    .filter(n => squares.some(w => squares.includes(n - w)));
 
 /**
  * Indices of 4 nearest neighbors of lattice contained in square

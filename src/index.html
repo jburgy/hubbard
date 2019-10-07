@@ -46,21 +46,7 @@
                     <legend>Lattice geometry</legend>
                     <label for="n"># of sites (<var>n</var>):</label>
                     <output for="n"></output>
-                    <input type="range" id="n" min="8" max="32" value="8" list="lattices">
-                    <datalist id="lattices">
-                        <option value="8"></option>
-                        <option value="9"></option>
-                        <option value="10"></option>
-                        <option value="13"></option>
-                        <option value="16"></option>
-                        <option value="17"></option>
-                        <option value="18"></option>
-                        <option value="20"></option>
-                        <option value="25"></option>
-                        <option value="26"></option>
-                        <option value="29"></option>
-                        <option value="32"></option>
-                    </datalist>
+                    <input type="range" id="n" min="0" max="15" value="4">
                     <br>
                     <label for="k"># of pairs (<var>k</var>):</label>
                     <output for="k"></output>
@@ -74,12 +60,16 @@
 </body>
 <script type="module">
     import diagonalize from './index.js';
+    import { sizes } from './lattice.js';
 
     document.addEventListener('DOMContentLoaded', ({ target: { readyState } }) => {
         const callback = () => diagonalize(document).then(console.log);
         document.querySelectorAll('input').forEach((input) => {
-            const output = document.querySelector(`output[for="${input.id}"]`);
-            const oninput = () => { output.value = input.label || input.value };
+            const { id } = input;
+            const output = document.querySelector(`output[for="${id}"]`);
+            const oninput = id === 'n'
+                ? () => { output.value = sizes[input.valueAsNumber]; }
+                : () => { output.value = input.value; };
             input.addEventListener('input', oninput, { passive: true });
             input.addEventListener('input', callback, { passive: true });
             oninput();
@@ -88,8 +78,9 @@
         const kin = document.querySelector('input#k');
         document.querySelector('input#n')
             .addEventListener('input', ({ target: { valueAsNumber } }) => {
+                const n = sizes[valueAsNumber];
                 const { valueAsNumber: old } = kin;
-                kin.max = `${valueAsNumber - 1}`;
+                kin.max = `${n - 1}`;
                 if (kin.valueAsNumber !== old) {
                     kin.dispatchEvent(new Event('input'));
                 }

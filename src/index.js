@@ -1,3 +1,4 @@
+import { sizes } from './lattice.js';
 import hubbard from './multiply.js';
 import lanczos from './lanczos.js';
 import tql1 from './tql1.js';
@@ -19,7 +20,8 @@ function parameters(document, selectors) {
 }
 
 export default function callback(document) {
-    const { n, k } = parameters(document, 'fieldset#geometry > input');
+    const { n: i, k } = parameters(document, 'fieldset#geometry > input');
+    const n = sizes[i];
     const key = (n << 8) | k;
     if (!(key in cache)) {
         cache[key] = hubbard(n, k);
