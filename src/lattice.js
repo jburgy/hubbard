@@ -19,21 +19,27 @@ export default function neighbors(n) {
     const u = squares.indexOf(n - v * v);
     const e = u * u + v * v;
     const reflect = (x, y) => {
-        while (u * x + v * y < 0) {
+        let z = u * x + v * y;
+        while (z < 0) {
             x += u;
             y += v;
+            z += e;
         }
-        while (u * x + v * y >= e) {
+        while (z >= e) {
             x -= u;
             y -= v;
+            z -= e;
         }
-        while (u * y - v * x < 0) {
+        z = u * y - v * x;
+        while (z < 0) {
             x -= v;
             y += u;
+            z += e;
         }
-        while (u * y - v * x >= e) {
+        while (z >= e) {
             x += v;
             y -= u;
+            z -= e;
         }
         return [x, y]
     };
@@ -41,8 +47,10 @@ export default function neighbors(n) {
     const result = [];
 
     for (let y = 0; y < u + v; ++y) {
-        const w = Math.ceil(y < u ?  -v * y / u : (u * y - e + 1) / v);
-        for (let x = w; u * x + v * y < e && u * y - v * x >= 0; ++x) {
+        for (let x = -v; x < u; ++x) {
+            if (indexedDB.cmp(reflect(x, y), [x, y])) {
+                continue;
+            }
             sites.push([x, y]);
             result.push([
                 reflect(x + 1, y),
