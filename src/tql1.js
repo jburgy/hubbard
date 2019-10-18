@@ -79,7 +79,6 @@ export default function tql1(d, e) {
             let c2 = 1;
             const el1 = e[l1];
             let s = 0;
-            const mml = m - l
 
             let s2;
             let c3;
