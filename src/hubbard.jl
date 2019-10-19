@@ -11,69 +11,39 @@ sizes = filter(n -> any(w -> (n - w) in squares, squares), 1:64)
 """
     hops(n)
 
-Computes bit masks neighbors for the square lattice with `n` sites
+Computes neighbor bit masks for the `n` site square lattice with
+periodic boundary conditions.
 
 # Examples
 ```jldoctest
 julia> hops(8)
 16-element Array{BitArray{1},1}:
  [1, 0, 0, 0, 1, 0, 0, 0]
- [1, 0, 1, 0, 0, 0, 0, 0]
  [0, 1, 1, 0, 0, 0, 0, 0]
- [0, 1, 0, 0, 1, 0, 0, 0]
  [0, 0, 1, 1, 0, 0, 0, 0]
- [0, 0, 1, 0, 0, 1, 0, 0]
  [0, 0, 0, 1, 0, 0, 0, 1]
- [0, 0, 0, 1, 0, 0, 1, 0]
  [0, 0, 0, 0, 1, 1, 0, 0]
- [0, 0, 0, 1, 1, 0, 0, 0]
  [0, 0, 0, 0, 0, 1, 1, 0]
- [0, 0, 0, 0, 0, 1, 0, 1]
  [1, 0, 0, 0, 0, 0, 1, 0]
- [0, 1, 0, 0, 0, 0, 1, 0]
  [0, 1, 0, 0, 0, 0, 0, 1]
+ [1, 0, 1, 0, 0, 0, 0, 0]
+ [0, 1, 0, 0, 1, 0, 0, 0]
+ [0, 0, 1, 0, 0, 1, 0, 0]
+ [0, 0, 0, 1, 0, 0, 1, 0]
+ [0, 0, 0, 1, 1, 0, 0, 0]
+ [0, 0, 0, 0, 0, 1, 0, 1]
+ [0, 1, 0, 0, 0, 0, 1, 0]
  [1, 0, 0, 0, 0, 0, 0, 1]
 
 ```
 """
 function hops(n)
-    spans((u, v)) = abs2(u) + abs2(v) == n
-    u, v = first(filter(spans, collect((u, v) for u=1:isqrt(n) for v=0:u)))
-    function fold((x, y))
-        z = u * x + v * y
-        while 0 > z
-            x += u
-            y += v
-            z += n
-        end
-        while z ≥ n
-            x -= u
-            y -= v
-            z -= n
-        end
-        z = u * y - v * x
-        while 0 > z
-            x -= v
-            y += u
-            z += n
-        end
-        while z ≥ n
-            x += v
-            y -= u
-            z -= n
-        end
-        x, y
-    end
-    inside(s) = fold(s) == s
-    sites = filter(inside, collect((x, y) for y=0:(u + v) for x=-v:u))
-    masks = map(sites) do s
-        a = fold(s .+ (1, 0))
-        b = fold(s .+ (0, 1))
-        a = map(r -> r ∈ (s, a), sites)
-        b = map(r -> r ∈ (s, b), sites)
-        BitVector(a), BitVector(b)
-    end
-    collect(Iterators.flatten(masks))
+    u, v = first(Iterators.filter(b -> b ⋅ b == n, [u, v] for u=isqrt(n):-1:1 for v=0:u))
+    # apply periodic boundary conditions
+    fold(x) = foldl((x, y) -> x - y * fld(x ⋅ y, n), eachrow([u v; -v u]), init = x)
+    sites = Iterators.filter(x -> fold(x) == x, [x, y] for y=0:(u + v) for x=-v:u)
+    masks(y) = map(x -> BitVector(map(∈((x, fold(x + y))), sites)), sites)
+    [masks([1, 0]); masks([0, 1 ])]
 end
 
 """
