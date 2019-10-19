@@ -37,7 +37,7 @@ julia> hops(8)
 
 ```
 """
-function hops(n)
+function hops(n::Integer)::Array{BitVector}
     u, v = first(Iterators.filter(b -> b ⋅ b == n, [u, v] for u=isqrt(n):-1:1 for v=0:u))
     # apply periodic boundary conditions
     fold(x) = foldl((x, y) -> x - y * fld(x ⋅ y, n), eachrow([u v; -v u]), init = x)
@@ -67,7 +67,7 @@ julia> map(index, eachrow(BitArray([
 
 ```
 """
-function index(mask)
+function index(mask::BitVector)::Integer
     n = k = nmkp1 = nCkm1 = 1
     nCk = index = 0
     for bit ∈ mask
@@ -108,10 +108,10 @@ julia> map(i -> mask(i, 4, 2), 0:5)
  
 ```
 """
-function mask(index, n, k)
+function mask(index::Integer, n::Integer, k::Integer)::BitVector
     nCk = binomial(n, k)
     nmk = n - k
-    mask = BitVector(undef, n)
+    mask = falses(n)
     while true
         if index >= nCk
             mask[1] = true
@@ -133,10 +133,11 @@ function mask(index, n, k)
     mask >> n
 end
 
-function hamiltonian(n, k, t, U)
+function hamiltonian(n::Integer, k::Integer, t::Real, U::Real)::Function
     nCk = binomial(n, k)
     hop = hops(n)
-    function multiply(x, y)
+    empty = falses(n)
+    function multiply!(y, x)
         for (i, w) ∈ enumerate(x)
             if w == 0
                 continue
@@ -149,11 +150,11 @@ function hamiltonian(n, k, t, U)
             tw = t * w
             for p ∈ hop
                 a = u .& p
-                if a ≠ falses(n) && a ≠ p
+                if a ≠ empty && a ≠ p
                     y[muladd(nCk, index(u .⊻ p), l) + 1] -= tw
                 end
                 b = d .& p
-                if b ≠ falses(n) && b ≠ p
+                if b ≠ empty && b ≠ p
                     y[muladd(nCk, h, index(d .⊻ p)) + 1] -= tw
                 end
             end
@@ -161,7 +162,7 @@ function hamiltonian(n, k, t, U)
     end
 end
 
-function lanczos(dimension, steps, multiply)
+function lanczos(dimension::Integer, steps::Integer, multiply!::Function)::SymTridiagonal
     u = zeros(dimension)
     v = zeros(dimension)
     w = zeros(dimension)
@@ -170,34 +171,34 @@ function lanczos(dimension, steps, multiply)
     beta = zeros(steps - 1)
 
     v[1] = 1
-    multiply(v, w)
+    multiply!(w, v)
 
     alpha[1] = v ⋅ w
-    w .-= alpha[1] .* v
+    @. w -= alpha[1] * v
 
     for step = 2:steps
         beta[step - 1] = norm(w)
         u .= v
-        v .= w / beta[step - 1]
+        @. v = w / beta[step - 1]
         w .= 0
-        multiply(v, w)
+        multiply!(w, v)
         alpha[step] = v ⋅ w
-        w .-= alpha[step] .* v - beta[step - 1] .* u
+        @. w -= alpha[step] * v - beta[step - 1] * u
     end
     SymTridiagonal(alpha, beta)
 end
 
 struct Model
     # lattice
-    n::Int
-    k::Int
+    n::Integer
+    k::Integer
     # interactions
     t::Real
     U::Real
 end
 
 function eigvals(m::Model, steps::Int)
-    dimension = binomial(m.n, m.k)^2
+    dimension = abs2(binomial(m.n, m.k))
     multiply = hamiltonian(m.n, m.k, m.t, m.U)
     matrix = lanczos(dimension, steps, multiply)
     eigvals(matrix)
