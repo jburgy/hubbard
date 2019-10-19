@@ -42,8 +42,8 @@ function hops(n)
     # apply periodic boundary conditions
     fold(x) = foldl((x, y) -> x - y * fld(x ⋅ y, n), eachrow([u v; -v u]), init = x)
     sites = Iterators.filter(x -> fold(x) == x, [x, y] for y=0:(u + v) for x=-v:u)
-    masks(y) = map(x -> BitVector(map(∈((x, fold(x + y))), sites)), sites)
-    [masks([1, 0]); masks([0, 1 ])]
+    masks(y) = map(x -> BitArray(z ∈ (x, fold(x + y)) for z ∈ sites), sites)
+    [masks([1, 0]); masks([0, 1])]
 end
 
 """
