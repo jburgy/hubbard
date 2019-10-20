@@ -61,7 +61,7 @@ export default function lanczos(dimension, steps, multiply) {
 
         const a = alpha[step] = inner(v, w);
         for (let i = 0; i < dimension; ++i) {
-            w[i] -= a * v[i] - b * u[i];
+            w[i] -= a * v[i] + b * u[i];
         }
     }
 

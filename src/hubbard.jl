@@ -54,7 +54,7 @@ in lexicographic order
 
 # Examples
 ```jldoctest
-julia> map(index, eachrow(BitArray([
+julia> map(index ∘ BitVector, eachrow(BitArray([
        1 1 0 0; 1 0 1 0; 0 1 1 0; 1 0 0 1; 0 1 0 1; 0 0 1 1
        ])))
 6-element Array{Int64,1}:
@@ -183,7 +183,7 @@ function lanczos(dimension::Integer, steps::Integer, multiply!::Function)::SymTr
         w .= 0
         multiply!(w, v)
         alpha[step] = v ⋅ w
-        @. w -= alpha[step] * v - beta[step - 1] * u
+        @. w -= alpha[step] * v + beta[step - 1] * u
     end
     SymTridiagonal(alpha, beta)
 end
