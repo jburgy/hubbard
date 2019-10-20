@@ -1,7 +1,7 @@
 module Hubbard
 
-using LinearAlgebra: norm, SymTridiagonal, ⋅
-import LinearAlgebra.eigvals
+using LinearAlgebra: ⋅, norm, SymTridiagonal, Eigen
+import LinearAlgebra.eigen
 export Model
 
 squares = (0:8) .^ 2
@@ -42,7 +42,7 @@ function hops(n::Integer)::Array{BitVector}
     fold(x) = foldl((x, y) -> x - y * fld(x ⋅ y, n), eachrow([u v; -v u]), init = x)
     sites = Iterators.filter(x -> fold(x) == x, [x, y] for y=0:(u + v) for x=-v:u)
     masks(y) = map(x -> BitArray(z ∈ (x, fold(x + y)) for z ∈ sites), sites)
-    [masks([1, 0]); masks([0, 1])]
+    return [masks([1, 0]); masks([0, 1])]
 end
 
 """
@@ -85,7 +85,7 @@ function index(mask::BitVector)::Integer
         end
         n += 1
     end
-    index
+    return index
 end
 
 """
@@ -129,7 +129,7 @@ function mask(index::Integer, n::Integer, k::Integer)::BitVector
         mask >>= 1
         n -= 1
     end
-    mask >> n
+    return mask >> n
 end
 
 function hamiltonian(n::Integer, k::Integer, t::Real, U::Real)::Function
@@ -161,15 +161,18 @@ function hamiltonian(n::Integer, k::Integer, t::Real, U::Real)::Function
     end
 end
 
-function lanczos(dimension::Integer, steps::Integer, multiply!::Function)::SymTridiagonal
+function lanczos(dimension::Integer, vectors::Matrix, multiply!::Function)::Union{SymTridiagonal, Matrix}
     u = zeros(dimension)
     v = zeros(dimension)
     w = zeros(dimension)
+    steps, range = size(vectors)
+    z = zeros(dimension, range)
 
     alpha = zeros(steps)
     beta = zeros(steps - 1)
 
     v[1] = 1
+    @. z += vectors[1, :]' * v
     multiply!(w, v)
 
     alpha[1] = v ⋅ w
@@ -181,12 +184,13 @@ function lanczos(dimension::Integer, steps::Integer, multiply!::Function)::SymTr
             u = v
             v = w / beta[step - 1]
             w = 0
+            z += vectors[step, :]' * v
         end
         multiply!(w, v)
         alpha[step] = v ⋅ w
         @. w -= alpha[step] * v + beta[step - 1] * u
     end
-    SymTridiagonal(alpha, beta)
+    return isempty(z) ? SymTridiagonal(alpha, beta) : z
 end
 
 struct Model
@@ -198,11 +202,14 @@ struct Model
     U::Real
 end
 
-function eigvals(m::Model, steps::Int)
+function eigen(m::Model, irange::UnitRange=1:1; steps::Integer=100)
     dimension = abs2(binomial(m.n, m.k))
-    multiply = hamiltonian(m.n, m.k, m.t, m.U)
-    matrix = lanczos(dimension, steps, multiply)
-    eigvals(matrix)
+    multiply! = hamiltonian(m.n, m.k, m.t, m.U)
+
+    m = lanczos(dimension, Matrix(undef, steps, 0), multiply!)
+    e = eigen(m, irange)
+    z = lanczos(dimension, e.vectors, multiply!)
+    return Eigen(e.values, z)
 end
 
 end
