@@ -1,9 +1,8 @@
 module Hubbard
 
-using Base: binomial, divrem, muladd, zeros
 using LinearAlgebra: norm, SymTridiagonal, ⋅
 import LinearAlgebra.eigvals
-export Model, eigvals
+export Model
 
 squares = (0:8) .^ 2
 sizes = filter(n -> any(w -> (n - w) in squares, squares), 1:64)
