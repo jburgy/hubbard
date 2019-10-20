@@ -178,9 +178,11 @@ function lanczos(dimension::Integer, steps::Integer, multiply!::Function)::SymTr
 
     for step = 2:steps
         beta[step - 1] = norm(w)
-        u .= v
-        @. v = w / beta[step - 1]
-        w .= 0
+        @. begin
+            u = v
+            v = w / beta[step - 1]
+            w = 0
+        end
         multiply!(w, v)
         alpha[step] = v ⋅ w
         @. w -= alpha[step] * v + beta[step - 1] * u
