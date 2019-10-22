@@ -1,8 +1,10 @@
 module Hubbard
 
 using LinearAlgebra: ⋅, norm, SymTridiagonal, Eigen
+using LinearMaps: FunctionMap
+using Arpack: eigs
 import LinearAlgebra.eigen
-export Model
+export hamiltonian
 
 squares = (0:8) .^ 2
 sizes = filter(n -> any(w -> (n - w) in squares, squares), 1:64)
@@ -132,12 +134,44 @@ function mask(index::Integer, n::Integer, k::Integer)::BitVector
     return mask >> n
 end
 
-function hamiltonian(n::Integer, k::Integer, t::Real, U::Real)::Function
+"""
+    hamiltonian(n, k, t, U)
+
+Implements the [Hubbard hamiltonian](https://en.wikipedia.org/wiki/Hubbard_model)
+as a [mutating linear map](https://github.com/Jutho/LinearMaps.jl).
+
+# Arguments
+- `n::Integer`: sites in the square lattice with periodic boundary conditions
+- `k::Integer`: spin up and spin down fermions
+- `t::Real`: hopping integral
+- `U::Real`: strength of on-site interaction 
+
+# Examples
+```jldoctest
+julia> h = hamiltonian(8, 4, 1., 2.)
+LinearMaps.FunctionMap{Float64}(multiply!, 4900, 4900; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
+
+julia> using Arpack: eigs
+
+julia> λ, ϕ = eigs(h, nev=1, which=:SR)
+
+julia> λ
+1-element Array{Float64,1}:
+ -11.775702792136244
+
+ julia> size(ϕ)
+ (4900, 1)
+
+```
+"""
+function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     nCk = binomial(n, k)
     hop = hops(n)
-    empty = falses(n)
     function multiply!(y, x)
-        for (i, w) ∈ enumerate(x)
+        m = length(x)
+        y .= 0.
+        @inbounds for i ∈ 1:m
+            w = x[i]
             if w == 0
                 continue
             end
@@ -149,67 +183,18 @@ function hamiltonian(n::Integer, k::Integer, t::Real, U::Real)::Function
             tw = t * w
             for p ∈ hop
                 a = u .& p
-                if a ≠ empty && a ≠ p
+                if any(a) && a ≠ p
                     y[muladd(nCk, index(u .⊻ p), l) + 1] -= tw
                 end
                 b = d .& p
-                if b ≠ empty && b ≠ p
+                if any(b) && b ≠ p
                     y[muladd(nCk, h, index(d .⊻ p)) + 1] -= tw
                 end
             end
         end
     end
-end
-
-function lanczos(dimension::Integer, vectors::Matrix, multiply!::Function)::Union{SymTridiagonal, Matrix}
-    u = zeros(dimension)
-    v = zeros(dimension)
-    w = zeros(dimension)
-    steps, range = size(vectors)
-    z = zeros(dimension, range)
-
-    alpha = zeros(steps)
-    beta = zeros(steps - 1)
-
-    v[1] = 1
-    @. z += vectors[1, :]' * v
-    multiply!(w, v)
-
-    alpha[1] = v ⋅ w
-    @. w -= alpha[1] * v
-
-    for step = 2:steps
-        beta[step - 1] = norm(w)
-        @. begin
-            u = v
-            v = w / beta[step - 1]
-            w = 0
-            z += vectors[step, :]' * v
-        end
-        multiply!(w, v)
-        alpha[step] = v ⋅ w
-        @. w -= alpha[step] * v + beta[step - 1] * u
-    end
-    return isempty(z) ? SymTridiagonal(alpha, beta) : z
-end
-
-struct Model
-    # lattice
-    n::Integer
-    k::Integer
-    # interactions
-    t::Real
-    U::Real
-end
-
-function eigen(m::Model, irange::UnitRange=1:1; steps::Integer=100)
-    dimension = abs2(binomial(m.n, m.k))
-    multiply! = hamiltonian(m.n, m.k, m.t, m.U)
-
-    m = lanczos(dimension, Matrix(undef, steps, 0), multiply!)
-    e = eigen(m, irange)
-    z = lanczos(dimension, e.vectors, multiply!)
-    return Eigen(e.values, z)
+    dimension = abs2(binomial(n, k))
+    return FunctionMap{T}(multiply!, dimension, ismutating=true, issymmetric=true)
 end
 
 end
