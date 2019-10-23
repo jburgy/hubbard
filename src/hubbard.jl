@@ -1,10 +1,7 @@
 module Hubbard
 
-using LinearAlgebra: ⋅, norm, SymTridiagonal, Eigen
+using LinearAlgebra: ⋅, norm
 using LinearMaps: FunctionMap
-using Arpack: eigs
-import LinearAlgebra.eigen
-export hamiltonian
 
 squares = (0:8) .^ 2
 sizes = filter(n -> any(w -> (n - w) in squares, squares), 1:64)
@@ -170,6 +167,7 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     function multiply!(y, x)
         m = length(x)
         y .= 0.
+        a = falses(n)
         @inbounds for i ∈ 1:m
             w = x[i]
             if w == 0
@@ -178,17 +176,20 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
 
             h, l = divrem(i - 1, nCk)
             u, d = mask(h, n, k), mask(l, n, k)
-            y[i] += U * w * count(u .& d)
+            map!(&, a, u, d)
+            y[i] += U * w * count(a)
 
             tw = t * w
             for p ∈ hop
-                a = u .& p
+                map!(&, a, u, p)
                 if any(a) && a ≠ p
-                    y[muladd(nCk, index(u .⊻ p), l) + 1] -= tw
+                    map!(⊻, a, u, p)
+                    y[muladd(nCk, index(a), l) + 1] -= tw
                 end
-                b = d .& p
-                if any(b) && b ≠ p
-                    y[muladd(nCk, h, index(d .⊻ p)) + 1] -= tw
+                map!(&, a, d, p)
+                if any(a) && a ≠ p
+                    map!(⊻, a, d, p)
+                    y[muladd(nCk, h, index(a)) + 1] -= tw
                 end
             end
         end
