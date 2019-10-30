@@ -36,10 +36,10 @@ julia> hops(8)
 ```
 """
 function hops(n::Integer)::Array{BitVector}
-    u, v = first(Iterators.filter(b -> b ⋅ b == n, [u, v] for u=isqrt(n):-1:1 for v=0:u))
+    u, v = first([u, v] for u=isqrt(n):-1:1 for v=0:u if sum(abs2, [u, v]) == n)
     # apply periodic boundary conditions
     fold(x) = foldl((x, y) -> x - y * fld(x ⋅ y, n), eachrow([u v; -v u]), init = x)
-    sites = Iterators.filter(x -> fold(x) == x, [x, y] for y=0:(u + v) for x=-v:u)
+    sites = [[x, y] for y=0:(u + v) for x=-v:u if fold([x, y]) == [x, y]]
     masks(y) = map(x -> BitArray(z ∈ (x, fold(x + y)) for z ∈ sites), sites)
     return [masks([1, 0]); masks([0, 1])]
 end
@@ -56,12 +56,12 @@ julia> map(index ∘ BitVector, eachrow(BitArray([
        1 1 0 0; 1 0 1 0; 0 1 1 0; 1 0 0 1; 0 1 0 1; 0 0 1 1
        ])))
 6-element Array{Int64,1}:
- 0
  1
  2
  3
  4
  5
+ 6
 
 ```
 """
@@ -84,7 +84,7 @@ function index(mask::BitVector)::Integer
         end
         n += 1
     end
-    return index
+    return index + 1
 end
 
 """
@@ -95,7 +95,7 @@ at position `index` in lexicographic order
 
 # Examples
 ```jldoctest
-julia> map(i -> mask(i, 4, 2), 0:5)
+julia> map(i -> mask(i, 4, 2), 1:6)
 6-element Array{BitArray{1},1}:
  [1, 1, 0, 0]
  [1, 0, 1, 0]
@@ -107,6 +107,7 @@ julia> map(i -> mask(i, 4, 2), 0:5)
 ```
 """
 function mask(index::Integer, n::Integer, k::Integer)::BitVector
+    index -= 1
     nCk = binomial(n, k)
     nmk = n - k
     mask = falses(n)
@@ -145,7 +146,7 @@ as a [mutating linear map](https://github.com/Jutho/LinearMaps.jl).
 
 # Examples
 ```jldoctest
-julia> h = hamiltonian(8, 4, 1., 2.)
+julia> h = hamiltonian(8, 4, 1., 4.)
 LinearMaps.FunctionMap{Float64}(multiply!, 4900, 4900; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
 
 julia> using Arpack: eigs
@@ -165,31 +166,32 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     nCk = binomial(n, k)
     hop = hops(n)
     function multiply!(y, x)
-        m = length(x)
-        y .= 0.
+        fill!(y, 0.0)
+        xm = reshape(x, nCk, :)
+        ym = reshape(y, nCk, :)
         a = falses(n)
-        @inbounds for i ∈ 1:m
-            w = x[i]
+        @inbounds for i ∈ CartesianIndices(xm)
+            w = xm[i]
             if w == 0
                 continue
             end
 
-            h, l = divrem(i - 1, nCk)
+            l, h = Tuple(i)
             u, d = mask(h, n, k), mask(l, n, k)
             map!(&, a, u, d)
-            y[i] += U * w * count(a)
+            ym[i] += U * w * count(a)
 
             tw = t * w
             for p ∈ hop
                 map!(&, a, u, p)
                 if any(a) && a ≠ p
                     map!(⊻, a, u, p)
-                    y[muladd(nCk, index(a), l) + 1] -= tw
+                    ym[l, index(a)] -= tw
                 end
                 map!(&, a, d, p)
                 if any(a) && a ≠ p
                     map!(⊻, a, d, p)
-                    y[muladd(nCk, h, index(a)) + 1] -= tw
+                    ym[index(a), h] -= tw
                 end
             end
         end
