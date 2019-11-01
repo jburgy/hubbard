@@ -10,7 +10,7 @@ periodic boundary conditions.
 
 # Examples
 ```jldoctest
-julia> map(h -> digits(h, base = 2, pad = 8), hops(8))
+julia> [digits(h, base = 2, pad = 8) for h ∈ hops(8)]
 16-element Array{Array{Int64,1},1}:
  [1, 0, 0, 0, 1, 0, 0, 0]
  [0, 1, 1, 0, 0, 0, 0, 0]
@@ -35,7 +35,7 @@ function hops(n::Integer)::Vector
     a = first([u, v] for u=isqrt(n):-1:1 for v=0:u if sum(abs2, [u, v]) == n)
     b = [0 -1; 1 0]a  # orthogonal basis vector
     # apply periodic boundary conditions
-    fold(x) = isequal(reduce((x, y) -> x - y * fld(x'y, n), [a, b], init = x))
+    fold(x) = isequal(reduce((x, y) -> x - y * fld(x'y, n), [a, b], init = x))  # '
     inside(x) = fold(x)(x)
     sites = [[x, y] for y=0:sum(a) for x=b[1]:b[2] if inside([x, y])]
     masks(y) = [(1<<(i-1))|(1<<(findfirst(fold(x + y), sites)-1)) for (i, x) in enumerate(sites)]
@@ -43,7 +43,7 @@ function hops(n::Integer)::Vector
 end
 
 """
-    index(mask)
+    index(m, c)
 
 Compute the index of the combination of `count_ones(mask)` items
 in lexicographic order
@@ -73,7 +73,7 @@ function index(m::Integer, c::Matrix)::Integer
 end
 
 """
-    mask(index, n, k)
+    mask(i, c)
 
 Compute the binary mask of the combination of `k` items out of `n`
 at position `index` in lexicographic order
@@ -94,20 +94,18 @@ julia> [digits(mask(i, c), base = 2, pad = 4) for i=1:6]
 ```
 """
 function mask(i::Integer, c::Matrix)::Integer
-    i -= 1
-    n, k = size(c)
+    k = size(c, 2)
     m = 0
-    @inbounds while k > 0
+    @inbounds for n ∈ size(c, 1):-1:1
         j = i - c[n, k]
-        if j >= 0
+        if j ≥ 1
+            m |= 1
+            k == 1 && return m << (n - 1)
             i = j
             k -= 1
-            m |= 1
         end
-        n -= 1
         m <<= 1
     end
-    return m << (n - 1)
 end
 
 """
@@ -129,14 +127,14 @@ LinearMaps.FunctionMap{Float64}(multiply!, 4900, 4900; ismutating=true, issymmet
 
 julia> using Arpack: eigs
 
-julia> λ, ϕ = eigs(h, nev=1, which=:SR)
+julia> λ, ϕ = eigs(h, nev=1, which=:SR);
 
 julia> λ
 1-element Array{Float64,1}:
  -11.775702792136244
 
- julia> size(ϕ)
- (4900, 1)
+julia> size(ϕ)
+(4900, 1)
 
 ```
 """
@@ -148,7 +146,6 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
         fill!(y, 0.0)
         xm = reshape(x, nCk, :)
         ym = reshape(y, nCk, :)
-        a = falses(n)
         @inbounds for i ∈ CartesianIndices(xm)
             w = xm[i]
             w == 0 && continue
