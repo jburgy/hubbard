@@ -2,63 +2,54 @@ module Hubbard
 
 import Base: findall, isequal, length
 using LinearMaps: FunctionMap
-export TiltedSquare, hamiltonian, hops, index, mask
+export TiltedSquare, hamiltonian, hops, index, mask, symmetries, ρ
+
+const ρ = [0 -1; 1 0]  # Rotation by `½π`
+const σ = [-1 0; 0 1]  # Reflection about `x` axis
 
 """
-    TiltedSquare{T}
+    restrict(x, tilt)
+
+Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict point `x`
+within the `tilt × ρ * tilt` titled square
+"""
+function restrict(x::Vector{Int}, tilt::Vector{Int})::Vector{Int}
+    reduce((u, v) -> u - v * fld(u'v, sum(abs2, tilt)), [tilt, ρ * tilt], init = x)
+end
+
+restrict(tilt::Vector{Int}) = Base.Fix2(restrict, tilt)
+
+"""
+    TiltedSquare
 
 represents a compact subset of the Euclidean square lattice with length `N`.
 """
-struct TiltedSquare{T<:Integer}
-    sites::Vector{Vector{T}}
-    a::Vector{T}
-    b::Vector{T}
+struct TiltedSquare
+    tilt::Vector{Int}
+    sites::Vector{Vector{Int}}
 
-    function TiltedSquare{T}(n::T) where T<:Integer
-        a = first([u, v] for u=isqrt(n):-1:1 for v=0:u if sum(abs2, [u, v]) == n)
-        b = [0 -1; 1 0]a
-        s0 = new(Vector{Vector{T}}(undef, n), a, b)
-        return new([[x, y] for y=0:sum(a) for x=b[1]:b[2] if [x, y] ∈ s0], a, b)
-    end    
+    function TiltedSquare(n)
+        tilt = first([u, v] for u=reverse(1:isqrt(n)) for v=0:u if sum(abs2, [u, v]) == n)
+        sites = [[x, y] for y=0:sum(tilt) for x=-tilt[2]:tilt[1] if [x, y] == restrict([x, y], tilt)]
+        return new(tilt, sites)
+    end
 end
 
 """
-    isequal(x, s)
-
-Implement https://en.wikipedia.org/wiki/Periodic_boundary_conditions in tilted
-square lattice `s`
-
-# Examples
-```jldoctest
-julia> s = TiltedSquare{Int64}(8)
-TiltedSquare{Int64}([[0, 0], [-1, 1], [0, 1], [1, 1], [-1, 2], [0, 2], [1, 2], [0, 3]], [2, 2], [-2, 2])
-
-julia> isequal(s.a, s)([0, 0])
-true
-
-````
-"""
-isequal(x::Vector{T}, s::TiltedSquare{T}) where T<:Integer = isequal(
-    reduce((u, v) -> u - v * fld(u'v, length(s.sites)), [s.a, s.b], init = x)
-)
-
-∈(x::Vector{T}, s::TiltedSquare{T}) where T<:Integer = isequal(x, s)(x)
-
-"""
-    findall(r::Matrix{T}, s::TiltedSquare{T})
+    findall(r::Matrix{Int}, s::TiltedSquare)
 
 Convert application of rotation matrix `r` to all sites in tilted square `s` to a
 permutation `1:length(s.sites)` assuming periodic boundary conditions.
 
-See the application of a rotation by `π/4` to the 8-site tilted square for example.
-The sites of `TiltedSquare{Int64}(8)` are labeled as follows:
+See the application of a rotation by `½π` to the 8-site tilted square for example.
+The sites of `TiltedSquare(8)` are labeled as follows:
 
       8
     5 6 7 
     2 3 4
       1
 
-Rotating these sites by `π/4` results in
+Rotating these sites by `½π` results in
 
       7 4
     8 6 3 1
@@ -72,35 +63,41 @@ by `a = [2, 2]` gives
     4 5 2
       1
 
+Interpreting this new arrangement as a permutation, site `1` stayed in place, `2` moved to
+position `4`, `3` moved to position `7`, ... → `(1 4 7 2 3 6 8 5)`
+
 ```jldoctest
-julia> findall([0 1; -1 0], TiltedSquare{Int64}(8))
+julia> findall(ρ, TiltedSquare(8))
 8-element Vector{Int64}:
  1
  4
- 5
- 2
- 8
- 6
- 3
  7
+ 2
+ 3
+ 6
+ 8
+ 5
 
 ```
 """
-findall(r::Matrix{T}, s::TiltedSquare{T}) where T<:Integer = [findfirst(isequal(r * site, s), s.sites) for site ∈ s.sites]
+function findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
+    restrict_ = restrict(s.tilt)
+    [findfirst(==(restrict_(r * site)), s.sites) for site ∈ s.sites]
+end
 
 """
-    findall(d::Vector{T}, s::TiltedSquare{T})
+    findall(d::Vector{T}, s::TiltedSquare)
 
 Convert application of displacement `d` to all sites in tilted square `s` to a
 permutation of `1:length(s.sites)` assuming periodic boundary conditions.
 
-    8→2'
-  5→6→7→1'
-  2→3→4→8'
-    1→5'
+      8→2'
+    5→6→7→1'
+    2→3→4→8'
+      1→5'
 
 ```jldoctest
-julia> findall([1, 0], TiltedSquare{Int64}(8))
+julia> findall([1, 0], TiltedSquare(8))
 8-element Vector{Int64}:
  5
  3
@@ -112,8 +109,10 @@ julia> findall([1, 0], TiltedSquare{Int64}(8))
  2
 
 """
-findall(d::Vector{T}, s::TiltedSquare{T}) where T<:Integer = [findfirst(isequal(site + d, s), s.sites) for site ∈ s.sites]
-
+function findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
+    restrict_ = restrict(s.tilt)
+    [findfirst(==(restrict_(site + d)), s.sites) for site ∈ s.sites]
+end
 
 """
     hops(tilted_square)
@@ -123,7 +122,7 @@ periodic boundary conditions.
 
 # Examples
 ```jldoctest
-julia> [digits(h, base = 2, pad = 8) for h ∈ hops(8)]
+julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare(8))]
 16-element Vector{Vector{Int64}}:
  [1, 0, 0, 0, 1, 0, 0, 0]
  [0, 1, 1, 0, 0, 0, 0, 0]
@@ -144,20 +143,77 @@ julia> [digits(h, base = 2, pad = 8) for h ∈ hops(8)]
 
 ```
 """
-function hops(s::TiltedSquare)::Vector
+function hops(s::TiltedSquare)::Vector{Int}
     masks(y) = [(1<<(i-1))|(1<<(j-1)) for (i, j) in enumerate(findall(y, s))]
     return [masks([1, 0]); masks([0, 1])]
 end
 
-hops(n::T) where T<:Integer = hops(TiltedSquare{T}(n))
-
 
 """
-    symmetries()
+    symmetries(s)
+
+Elements of dihedral group D₄ specialized to the `n` site tilted square (minus
+translations by `tilt` and `ρ * tilt` as those are already taken care of by `restrict`)
+as binary masks.  The group is generated by 2 elements:
+
+1. Rotation by `½π`: `ρ`
+1. Reflection about `x` axis: ``
+
+Remaining elements can be represented as products of these generators:
+
+1. Inversion: `ρ²`
+1. Rotation by `-½π`: `ρ³ ≡ ρ⁻¹`
+1. Reflection about anti-diagonal: `ρ σ`
+1. Reflection about `y` axis: `ρ² σ ≡ ρ σ ρ⁻¹ ≡ τ`
+1. Reflection about diagonal: `ρ³ σ ≡ ρ τ`
+
+We already know that rotation by `½π` is equivalent to the `(1 4 7 2 3 6 8 5)` permutation.
+Because fermions are indistinghishable, we convert this permutation to a bit mask where 1
+indicates the site moves.  `(1 4 7 2 3 6 8 5)` becomes `0b011111011`
+
+Reflection about the `x` axis does
+
+      8
+    7 6 5
+    4 3 2
+      1
+
+or `(1 4 3 2 7 6 5 8)` as a permutation and `0b01011010` as a bitmask.
+
+Let us confirm D₄ by working out one repeated application: `ρ σ`
+
+                 5
+      5 2      8 6 3
+    8 6 3 1    2 7 4
+      7 4        1
+
+or `(1 2 7 4 8 6 3 5)` as a permutation.  We can easily verify that this equals the product of
+`(1 4 7 2 3 6 8 5)(1 4 3 2 7 6 5 8)` by following the orbit of each site:
+
+    1 → 1 → 1
+    2 → 4 → 2
+    3 → 3 → 7
+    4 → 2 → 4
+    5 → 7 → 8
+    6 → 6 → 6
+    7 → 5 → 3
+    8 → 8 → 5
+
+```jldoctest
+julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare(8))]
+6-element Vector{Vector{Int64}}:
+ [0, 1, 1, 1, 1, 0, 1, 1]
+ [0, 0, 1, 0, 1, 0, 1, 1]
+ [0, 1, 1, 1, 1, 0, 1, 1]
+ [0, 0, 1, 0, 1, 0, 1, 1]
+ [0, 1, 1, 1, 0, 0, 0, 1]
+ [0, 0, 1, 0, 1, 0, 1, 1]
+
+```
 """
-function symmetries(s::TiltedSquare)::Vector
-    mask(r) = reduce((a, b) -> a << 1 | b, (a == b for (a, b) ∈ enumerate(findall(r, s))))
-    return [mask(r) for r ∈ [[1 0; 0 -1], [-1 0; 0 1], [0 -1; 1 0], [-1 0; 0 -1]]]
+function symmetries(s::TiltedSquare)::Vector{Int}
+    mask(r) = reduce((a, b) -> a << 1 | b, (a ≠ b for (a, b) ∈ Iterators.reverse(enumerate(findall(r, s)))))
+    return [mask(r) for r ∈ [ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
 """
@@ -259,7 +315,8 @@ julia> size(ϕ)
 function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     c = [binomial(i, j) for i=0:(n-1), j=1:k]
     nCk = binomial(n, k)
-    hop = hops(n)
+    s = TiltedSquare(n)
+    hop = hops(s)
     ok = isequal(k) ∘ count_ones
     function mult!(y, x)
         fill!(y, 0.0)
