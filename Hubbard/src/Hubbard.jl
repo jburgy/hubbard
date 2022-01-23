@@ -28,11 +28,13 @@ struct TiltedSquare
     sites::Vector{Vector{Int}}
 
     function TiltedSquare(n)
-        tilt = first([u, v] for u=reverse(1:isqrt(n)) for v=0:u if sum(abs2, [u, v]) == n)
-        sites = [[x, y] for y=0:sum(tilt) for x=-tilt[2]:tilt[1] if [x, y] == restrict([x, y], tilt)]
+        tilt = first(t for t ∈ ([isqrt(n - v^2), v] for v ∈ 0:isqrt(n÷2)) if sum(abs2, t) == n)
+        sites = [[x, y] for y ∈ 0:sum(tilt) for x ∈ -tilt[2]:tilt[1] if [x, y] == restrict([x, y], tilt)]
         return new(tilt, sites)
     end
 end
+
+Base.isequal(s::TiltedSquare) = isequal ∘ restrict(s.tilt)
 
 """
     Base.findall(r::Matrix{Int}, s::TiltedSquare)
@@ -80,8 +82,7 @@ julia> findall(ρ, TiltedSquare(8))
 ```
 """
 function Base.findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
-    restrict_ = restrict(s.tilt)
-    [findfirst(==(restrict_(r * site)), s.sites) for site ∈ s.sites]
+    [findfirst(isequal(s)(r * site), s.sites) for site ∈ s.sites]
 end
 
 """
@@ -109,8 +110,7 @@ julia> findall([1, 0], TiltedSquare(8))
 
 """
 function Base.findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
-    restrict_ = restrict(s.tilt)
-    [findfirst(==(restrict_(site + d)), s.sites) for site ∈ s.sites]
+    [findfirst(isequal(s)(site + d), s.sites) for site ∈ s.sites]
 end
 
 """
