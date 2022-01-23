@@ -1,6 +1,5 @@
 module Hubbard
 
-import Base: findall, isequal, length
 using LinearMaps: FunctionMap
 export TiltedSquare, hamiltonian, hops, index, mask, symmetries, ρ
 
@@ -36,7 +35,7 @@ struct TiltedSquare
 end
 
 """
-    findall(r::Matrix{Int}, s::TiltedSquare)
+    Base.findall(r::Matrix{Int}, s::TiltedSquare)
 
 Convert application of rotation matrix `r` to all sites in tilted square `s` to a
 permutation `1:length(s.sites)` assuming periodic boundary conditions.
@@ -80,7 +79,7 @@ julia> findall(ρ, TiltedSquare(8))
 
 ```
 """
-function findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
+function Base.findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
     restrict_ = restrict(s.tilt)
     [findfirst(==(restrict_(r * site)), s.sites) for site ∈ s.sites]
 end
@@ -109,7 +108,7 @@ julia> findall([1, 0], TiltedSquare(8))
  2
 
 """
-function findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
+function Base.findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
     restrict_ = restrict(s.tilt)
     [findfirst(==(restrict_(site + d)), s.sites) for site ∈ s.sites]
 end
@@ -201,7 +200,8 @@ or `(1 2 7 4 8 6 3 5)` as a permutation.  We can easily verify that this equals 
 
 ```jldoctest
 julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare(8))]
-6-element Vector{Vector{Int64}}:
+7-element Vector{Vector{Int64}}:
+ [0, 0, 0, 0, 0, 0, 0, 0]
  [0, 1, 1, 1, 1, 0, 1, 1]
  [0, 0, 1, 0, 1, 0, 1, 1]
  [0, 1, 1, 1, 1, 0, 1, 1]
@@ -213,7 +213,7 @@ julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare(8))]
 """
 function symmetries(s::TiltedSquare)::Vector{Int}
     mask(r) = reduce((a, b) -> a << 1 | b, (a ≠ b for (a, b) ∈ Iterators.reverse(enumerate(findall(r, s)))))
-    return [mask(r) for r ∈ [ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
+    return [mask(r) for r ∈ [[1 0; 0 1], ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
 """
@@ -245,6 +245,8 @@ function index(m::Integer, c::Matrix)::Integer
     end
     return i
 end
+
+index(n::Tuple{Int, Int}, c::Matrix) = CartesianIndex(Tuple(index(m, c) for m ∈ n))
 
 """
     mask(i, c)
@@ -297,7 +299,7 @@ as a [mutating linear map](https://github.com/Jutho/LinearMaps.jl).
 # Examples
 ```jldoctest
 julia> h = hamiltonian(8, 4, 1., 4.)
-4900×4900 LinearMaps.FunctionMap{Float64}(mult!; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
+3414×3414 LinearMaps.FunctionMap{Float64}(mult!; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
 
 julia> using Arpack: eigs
 
@@ -305,10 +307,10 @@ julia> λ, ϕ = eigs(h, nev=1, which=:SR);
 
 julia> λ
 1-element Vector{Float64}:
- -11.775702792136236
+ -11.859367228698792
 
 julia> size(ϕ)
-(4900, 1)
+(3414, 1)
 
 ```
 """
@@ -318,32 +320,44 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     s = TiltedSquare(n)
     hop = hops(s)
     ok = isequal(k) ∘ count_ones
+
+    # Apply all symmetries to all combinations
+    # TODO: separate nup and ndn (now k = nup = ndn)
+    masks = Base.Fix2(mask, c).(1:nCk) .⊻ unique(symmetries(s))'
+
+    minpairs = [
+        minimum(t for t ∈ zip(m, n) if all(ok, t))
+        for m ∈ eachrow(masks), n ∈ eachrow(masks)
+    ]
+
+    uniquepairs = sort(vec(minpairs))
+    unique!(uniquepairs)
+
+    minindices = Base.Fix1(searchsortedfirst, uniquepairs).(minpairs)
     function mult!(y, x)
         fill!(y, 0.0)
-        xm = reshape(x, nCk, :)
-        ym = reshape(y, nCk, :)
-        @inbounds for i ∈ CartesianIndices(xm)
-            w = xm[i]
+        @inbounds for ((i, w), (u, d)) ∈ zip(enumerate(x), uniquepairs)
             w == 0 && continue
- 
-            l, h = i.I
-            u, d = mask(h, c), mask(l, c)
-            ym[i] += U * w * count_ones(u & d)
- 
+
+            y[i] += U * w * count_ones(u & d)
+
+            iu = index(u, c)
+            id = index(d, c)
+
             tw = t * w
             for p ∈ hop
                 a = u ⊻ p
                 if a ≠ u && ok(a)
-                    ym[l, index(a, c)] -= tw
+                    y[minindices[index(a, c), id]] -= tw
                 end
                 a = d ⊻ p
                 if a ≠ d && ok(a)
-                    ym[index(a, c), h] -= tw
+                    y[minindices[iu, index(a, c)]] -= tw
                 end
             end
         end
     end
-    return FunctionMap{T}(mult!, abs2(nCk), ismutating=true, issymmetric=true)
+    return FunctionMap{T}(mult!, length(uniquepairs), ismutating=true, issymmetric=true)
 end
 
 end
