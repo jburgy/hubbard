@@ -35,6 +35,8 @@ struct TiltedSquare
 end
 
 Base.isequal(s::TiltedSquare) = isequal ∘ restrict(s.tilt)
+Base.iterate(s::TiltedSquare, args...) = Base.iterate(s.sites, args...)
+Base.length(s::TiltedSquare) = Base.length(s.sites)
 
 """
     Base.findall(r::Matrix{Int}, s::TiltedSquare)
@@ -82,7 +84,7 @@ julia> findall(ρ, TiltedSquare(8))
 ```
 """
 function Base.findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
-    [findfirst(isequal(s)(r * site), s.sites) for site ∈ s.sites]
+    [findfirst(isequal(s)(r * site), s.sites) for site ∈ s]
 end
 
 """
@@ -110,7 +112,7 @@ julia> findall([1, 0], TiltedSquare(8))
 
 """
 function Base.findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
-    [findfirst(isequal(s)(site + d), s.sites) for site ∈ s.sites]
+    [findfirst(isequal(s)(site + d), s.sites) for site ∈ s]
 end
 
 """
