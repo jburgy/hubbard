@@ -111,7 +111,8 @@ julia> findall(ρ, TiltedSquare{8}())
 ```
 """
 function Base.findall(r::SMatrix{2,2,Int,4}, s::TiltedSquare)::Vector{Int}
-    [findfirst(isequal(s)(r * site), s.sites) for site ∈ s]
+    by = reverse ∘ restrict(s.tilt) ∘ Base.Fix1(*, r)
+    invperm(collect(sortperm(s.sites, by=by)))
 end
 
 """
@@ -139,7 +140,8 @@ julia> findall([1, 0], TiltedSquare{8}())
 
 """
 function Base.findall(d::SVector{2,Int}, s::TiltedSquare)::Vector{Int}
-    [findfirst(isequal(s)(site + d), s.sites) for site ∈ s]
+    by = reverse ∘ restrict(s.tilt) ∘ Base.Fix2(+, d)
+    invperm(collect(sortperm(s.sites, by=by)))
 end
 
 """
