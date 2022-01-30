@@ -1,10 +1,11 @@
 module Hubbard
 
 using LinearMaps: FunctionMap
+using StaticArrays
 export TiltedSquare, hamiltonian, hops, index, mask, symmetries, ρ
 
-const ρ = [0 -1; 1 0]  # Rotation by `½π`
-const σ = [-1 0; 0 1]  # Reflection about `x` axis
+const ρ = SA[0 -1; 1 0]  # Rotation by `½π`
+const σ = SA[-1 0; 0 1]  # Reflection about `x` axis
 
 """
     restrict(x, tilt)
@@ -12,25 +13,51 @@ const σ = [-1 0; 0 1]  # Reflection about `x` axis
 Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict point `x`
 within the `tilt × ρ * tilt` titled square
 """
-function restrict(x::Vector{Int}, tilt::Vector{Int})::Vector{Int}
+function restrict(x::SVector{2,Int}, tilt::SVector{2,Int})::SVector{2,Int}
     reduce((u, v) -> u - v * fld(u'v, sum(abs2, tilt)), [tilt, ρ * tilt], init = x)
 end
 
-restrict(tilt::Vector{Int}) = Base.Fix2(restrict, tilt)
+restrict(tilt::SVector{2,Int}) = Base.Fix2(restrict, tilt)
+
+"""
+An integer greater than one can be written as a sum of two squares if and only if
+its prime decomposition contains no factor pᵏ, where prime p ≡ 3 (mod 4) and k is odd.
+"""
+function istwosquares(n::Int)::Bool
+    p = 2
+    k = 0
+    i = false
+    while p ≤ n
+        div, rem = divrem(n, p)
+        if rem ≠ 0
+            isodd(k) && return false
+            p += 1
+            k = 0
+            i = p % 4 == 3
+        else
+            n = div
+            k += i
+        end
+    end
+    return iseven(k)
+end
 
 """
     TiltedSquare
 
-represents a compact subset of the Euclidean square lattice with length `N`.
+represents a compact subset of the Euclidean square lattice with `n` sites.
 """
-struct TiltedSquare
-    tilt::Vector{Int}
-    sites::Vector{Vector{Int}}
+struct TiltedSquare{N}
+    tilt::SVector{2,Int}
+    sites::SVector{N,SVector{2,Int}}
 
-    function TiltedSquare(n)
-        tilt = first(t for t ∈ ([isqrt(n - v^2), v] for v ∈ 0:isqrt(n÷2)) if sum(abs2, t) == n)
-        sites = [[x, y] for y ∈ 0:sum(tilt) for x ∈ -tilt[2]:tilt[1] if [x, y] == restrict([x, y], tilt)]
-        return new(tilt, sites)
+    function TiltedSquare{N}() where N
+        istwosquares(N) || throw(DomainError("$n is not a sum of two squares"))
+        pred = ==(N) ∘ Base.Fix1(sum, abs2)
+        tilt = first(t for t ∈ (SVector(isqrt(N - v^2), v) for v ∈ 0:isqrt(N÷2)) if pred(t))
+        pred = isequal ∘ Base.Fix2(restrict, tilt)
+        sites = [site for site ∈ (SVector(x, y) for y ∈ 0:sum(tilt) for x ∈ -tilt[2]:tilt[1]) if pred(site)(site)]
+        return new(tilt, SVector{N,SVector{2,Int}}(sites))
     end
 end
 
@@ -45,7 +72,7 @@ Convert application of rotation matrix `r` to all sites in tilted square `s` to 
 permutation `1:length(s.sites)` assuming periodic boundary conditions.
 
 See the application of a rotation by `½π` to the 8-site tilted square for example.
-The sites of `TiltedSquare(8)` are labeled as follows:
+The sites of `TiltedSquare{8}()` are labeled as follows:
 
       8
     5 6 7 
@@ -70,7 +97,7 @@ Interpreting this new arrangement as a permutation, site `1` stayed in place, `2
 position `4`, `3` moved to position `7`, ... → `(1 4 7 2 3 6 8 5)`
 
 ```jldoctest
-julia> findall(ρ, TiltedSquare(8))
+julia> findall(ρ, TiltedSquare{8}())
 8-element Vector{Int64}:
  1
  4
@@ -83,7 +110,7 @@ julia> findall(ρ, TiltedSquare(8))
 
 ```
 """
-function Base.findall(r::Matrix{Int}, s::TiltedSquare)::Vector{Int}
+function Base.findall(r::SMatrix{2,2,Int,4}, s::TiltedSquare)::Vector{Int}
     [findfirst(isequal(s)(r * site), s.sites) for site ∈ s]
 end
 
@@ -99,7 +126,7 @@ permutation of `1:length(s.sites)` assuming periodic boundary conditions.
       1→5'
 
 ```jldoctest
-julia> findall([1, 0], TiltedSquare(8))
+julia> findall([1, 0], TiltedSquare{8}())
 8-element Vector{Int64}:
  5
  3
@@ -111,7 +138,7 @@ julia> findall([1, 0], TiltedSquare(8))
  2
 
 """
-function Base.findall(d::Vector{Int}, s::TiltedSquare)::Vector{Int}
+function Base.findall(d::SVector{2,Int}, s::TiltedSquare)::Vector{Int}
     [findfirst(isequal(s)(site + d), s.sites) for site ∈ s]
 end
 
@@ -123,7 +150,7 @@ periodic boundary conditions.
 
 # Examples
 ```jldoctest
-julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare(8))]
+julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare{8}())]
 16-element Vector{Vector{Int64}}:
  [1, 0, 0, 0, 1, 0, 0, 0]
  [0, 1, 1, 0, 0, 0, 0, 0]
@@ -146,7 +173,7 @@ julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare(8))]
 """
 function hops(s::TiltedSquare)::Vector{Int}
     masks(y) = [(1<<(i-1))|(1<<(j-1)) for (i, j) in enumerate(findall(y, s))]
-    return [masks([1, 0]); masks([0, 1])]
+    return [masks(SA[1, 0]); masks(SA[0, 1])]
 end
 
 
@@ -201,7 +228,7 @@ or `(1 2 7 4 8 6 3 5)` as a permutation.  We can easily verify that this equals 
     8 → 8 → 5
 
 ```jldoctest
-julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare(8))]
+julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare{8}())]
 7-element Vector{Vector{Int64}}:
  [0, 0, 0, 0, 0, 0, 0, 0]
  [0, 1, 1, 1, 1, 0, 1, 1]
@@ -215,7 +242,7 @@ julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare(8))]
 """
 function symmetries(s::TiltedSquare)::Vector{Int}
     mask(r) = reduce((a, b) -> a << 1 | b, (a ≠ b for (a, b) ∈ Iterators.reverse(enumerate(findall(r, s)))))
-    return [mask(r) for r ∈ [[1 0; 0 1], ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
+    return [mask(r) for r ∈ [SA[1 0; 0 1], ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
 """
@@ -319,7 +346,7 @@ julia> size(ϕ)
 function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
     c = [binomial(i, j) for i=0:(n-1), j=1:k]
     nCk = binomial(n, k)
-    s = TiltedSquare(n)
+    s = TiltedSquare{n}()
     hop = hops(s)
     ok = isequal(k) ∘ count_ones
 
