@@ -37,7 +37,10 @@ Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict poi
 within the `tilt × ρ * tilt` titled square
 """
 function restrict(x::SVector{2,Int}, tilt::SVector{2,Int})::SVector{2,Int}
-    reduce((u, v) -> u - v * fld(u'v, sum(abs2, tilt)), [tilt, ρ * tilt], init = x)
+    n = sum(abs2, tilt)
+    reduce([tilt, ρ * tilt], init = x) do u, v
+        u - v * fld(u'v, n)
+    end
 end
 
 restrict(tilt::SVector{2,Int}) = Base.Fix2(restrict, tilt)
@@ -55,15 +58,11 @@ struct TiltedSquare{N}
         istwosquares(N) || throw(DomainError("$n is not a sum of two squares"))
         pred = ==(N) ∘ Base.Fix1(sum, abs2)
         tilt = first(t for t ∈ (SVector(isqrt(N - v^2), v) for v ∈ 0:isqrt(N ÷ 2)) if pred(t))
-        pred = isequal ∘ Base.Fix2(restrict, tilt)
+        pred = isequal ∘ restrict(tilt)
         sites = [site for site ∈ (SVector(x, y) for x ∈ -tilt[2]:tilt[1] for y ∈ 0:sum(tilt)) if pred(site)(site)]
         return new(tilt, SVector{N,SVector{2,Int}}(sites))
     end
 end
-
-Base.isequal(s::TiltedSquare) = isequal ∘ restrict(s.tilt)
-Base.iterate(s::TiltedSquare, args...) = Base.iterate(s.sites, args...)
-Base.length(s::TiltedSquare) = Base.length(s.sites)
 
 """
     Base.findall(r::Matrix{Int}, s::TiltedSquare)
@@ -242,7 +241,7 @@ julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare{8}())]
 ```
 """
 function symmetries(s::TiltedSquare)::Vector{Int}
-    mask(r) = reduce((a, b) -> a << 1 | b, (a ≠ b for (a, b) ∈ Iterators.reverse(enumerate(findall(r, s)))))
+    mask(r) = mapreduce(Base.splat(≠), (a, b) -> a << 1 | b, Iterators.reverse(enumerate(findall(r, s))))
     return [mask(r) for r ∈ [SA[1 0; 0 1], ρ, ρ^2, ρ^3, σ, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
