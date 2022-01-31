@@ -8,18 +8,6 @@ const ρ = SA[0 -1; 1 0]  # Rotation by `½π`
 const σ = SA[-1 0; 0 1]  # Reflection about `x` axis
 
 """
-    restrict(x, tilt)
-
-Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict point `x`
-within the `tilt × ρ * tilt` titled square
-"""
-function restrict(x::SVector{2,Int}, tilt::SVector{2,Int})::SVector{2,Int}
-    reduce((u, v) -> u - v * fld(u'v, sum(abs2, tilt)), [tilt, ρ * tilt], init = x)
-end
-
-restrict(tilt::SVector{2,Int}) = Base.Fix2(restrict, tilt)
-
-"""
 An integer greater than one can be written as a sum of two squares if and only if
 its prime decomposition contains no factor pᵏ, where prime p ≡ 3 (mod 4) and k is odd.
 """
@@ -43,6 +31,18 @@ function istwosquares(n::Int)::Bool
 end
 
 """
+    restrict(x, tilt)
+
+Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict point `x`
+within the `tilt × ρ * tilt` titled square
+"""
+function restrict(x::SVector{2,Int}, tilt::SVector{2,Int})::SVector{2,Int}
+    reduce((u, v) -> u - v * fld(u'v, sum(abs2, tilt)), [tilt, ρ * tilt], init = x)
+end
+
+restrict(tilt::SVector{2,Int}) = Base.Fix2(restrict, tilt)
+
+"""
     TiltedSquare
 
 represents a compact subset of the Euclidean square lattice with `n` sites.
@@ -51,12 +51,12 @@ struct TiltedSquare{N}
     tilt::SVector{2,Int}
     sites::SVector{N,SVector{2,Int}}
 
-    function TiltedSquare{N}() where N
+    function TiltedSquare{N}() where {N}
         istwosquares(N) || throw(DomainError("$n is not a sum of two squares"))
         pred = ==(N) ∘ Base.Fix1(sum, abs2)
-        tilt = first(t for t ∈ (SVector(isqrt(N - v^2), v) for v ∈ 0:isqrt(N÷2)) if pred(t))
+        tilt = first(t for t ∈ (SVector(isqrt(N - v^2), v) for v ∈ 0:isqrt(N ÷ 2)) if pred(t))
         pred = isequal ∘ Base.Fix2(restrict, tilt)
-        sites = [site for site ∈ (SVector(x, y) for y ∈ 0:sum(tilt) for x ∈ -tilt[2]:tilt[1]) if pred(site)(site)]
+        sites = [site for site ∈ (SVector(x, y) for x ∈ -tilt[2]:tilt[1] for y ∈ 0:sum(tilt)) if pred(site)(site)]
         return new(tilt, SVector{N,SVector{2,Int}}(sites))
     end
 end
@@ -74,45 +74,44 @@ permutation `1:length(s.sites)` assuming periodic boundary conditions.
 See the application of a rotation by `½π` to the 8-site tilted square for example.
 The sites of `TiltedSquare{8}()` are labeled as follows:
 
-      8
-    5 6 7 
-    2 3 4
-      1
+      6
+    2 5 8 
+    1 4 7
+      3
 
 Rotating these sites by `½π` results in
 
-      7 4
-    8 6 3 1
-      5 2
+      8 7
+    6 5 4 3
+      2 1
 
-Translating indices which landed outside the original shape (i.e. all but `1` and `4`)
+Translating indices which landed outside the original shape (i.e. all but `3` and `7`)
 by `a = [2, 2]` gives
 
-      7
-    8 6 3
-    4 5 2
-      1
+      8
+    6 5 4
+    7 2 1
+      3
 
-Interpreting this new arrangement as a permutation, site `1` stayed in place, `2` moved to
-position `4`, `3` moved to position `7`, ... → `(1 4 7 2 3 6 8 5)`
+Interpreting this new arrangement as a permutation, site `1` moved to position `7`, `2`
+moved to position `4`, `3` stayed in place, ... → `(7 4 3 8 5 2 1 6)`
 
 ```jldoctest
 julia> findall(ρ, TiltedSquare{8}())
 8-element Vector{Int64}:
- 1
- 4
  7
- 2
+ 4
  3
- 6
  8
  5
+ 2
+ 1
+ 6
 
 ```
 """
 function Base.findall(r::SMatrix{2,2,Int,4}, s::TiltedSquare)::Vector{Int}
-    by = reverse ∘ restrict(s.tilt) ∘ Base.Fix1(*, r)
-    invperm(collect(sortperm(s.sites, by=by)))
+    invperm(collect(sortperm(s.sites, by = restrict(s.tilt) ∘ Base.Fix1(*, r))))
 end
 
 """
@@ -121,27 +120,26 @@ end
 Convert application of displacement `d` to all sites in tilted square `s` to a
 permutation of `1:length(s.sites)` assuming periodic boundary conditions.
 
-      8→2'
-    5→6→7→1'
-    2→3→4→8'
-      1→5'
+      6→1'
+    2→5→8→3'
+    1→4→7→6'
+      3→2'
 
 ```jldoctest
-julia> findall([1, 0], TiltedSquare{8}())
+julia> findall(SA[1, 0], TiltedSquare{8}())
 8-element Vector{Int64}:
- 5
- 3
  4
- 8
- 6
- 7
- 1
+ 5
  2
+ 7
+ 8
+ 1
+ 6
+ 3
 
 """
 function Base.findall(d::SVector{2,Int}, s::TiltedSquare)::Vector{Int}
-    by = reverse ∘ restrict(s.tilt) ∘ Base.Fix2(+, d)
-    invperm(collect(sortperm(s.sites, by=by)))
+    invperm(collect(sortperm(s.sites, by = restrict(s.tilt) ∘ Base.Fix2(+, d))))
 end
 
 """
@@ -154,27 +152,27 @@ periodic boundary conditions.
 ```jldoctest
 julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare{8}())]
 16-element Vector{Vector{Int64}}:
- [1, 0, 0, 0, 1, 0, 0, 0]
- [0, 1, 1, 0, 0, 0, 0, 0]
- [0, 0, 1, 1, 0, 0, 0, 0]
- [0, 0, 0, 1, 0, 0, 0, 1]
- [0, 0, 0, 0, 1, 1, 0, 0]
- [0, 0, 0, 0, 0, 1, 1, 0]
- [1, 0, 0, 0, 0, 0, 1, 0]
- [0, 1, 0, 0, 0, 0, 0, 1]
- [1, 0, 1, 0, 0, 0, 0, 0]
+ [1, 0, 0, 1, 0, 0, 0, 0]
  [0, 1, 0, 0, 1, 0, 0, 0]
- [0, 0, 1, 0, 0, 1, 0, 0]
+ [0, 1, 1, 0, 0, 0, 0, 0]
  [0, 0, 0, 1, 0, 0, 1, 0]
- [0, 0, 0, 1, 1, 0, 0, 0]
- [0, 0, 0, 0, 0, 1, 0, 1]
+ [0, 0, 0, 0, 1, 0, 0, 1]
+ [1, 0, 0, 0, 0, 1, 0, 0]
+ [0, 0, 0, 0, 0, 1, 1, 0]
+ [0, 0, 1, 0, 0, 0, 0, 1]
+ [1, 1, 0, 0, 0, 0, 0, 0]
  [0, 1, 0, 0, 0, 0, 1, 0]
+ [0, 0, 1, 1, 0, 0, 0, 0]
+ [0, 0, 0, 1, 1, 0, 0, 0]
+ [0, 0, 0, 0, 1, 1, 0, 0]
+ [0, 0, 1, 0, 0, 1, 0, 0]
+ [0, 0, 0, 0, 0, 0, 1, 1]
  [1, 0, 0, 0, 0, 0, 0, 1]
 
 ```
 """
 function hops(s::TiltedSquare)::Vector{Int}
-    masks(y) = [(1<<(i-1))|(1<<(j-1)) for (i, j) in enumerate(findall(y, s))]
+    masks(y) = [(1 << (i - 1)) | (1 << (j - 1)) for (i, j) in enumerate(findall(y, s))]
     return [masks(SA[1, 0]); masks(SA[0, 1])]
 end
 
@@ -197,54 +195,55 @@ Remaining elements can be represented as products of these generators:
 1. Reflection about `y` axis: `ρ² σ ≡ ρ σ ρ⁻¹ ≡ τ`
 1. Reflection about diagonal: `ρ³ σ ≡ ρ τ`
 
-We already know that rotation by `½π` is equivalent to the `(1 4 7 2 3 6 8 5)` permutation.
+We already know that rotation by `½π` is equivalent to the `(7 4 3 8 5 2 1 6)` permutation.
 Because fermions are indistinghishable, we convert this permutation to a bit mask where 1
-indicates the site moves.  `(1 4 7 2 3 6 8 5)` becomes `0b011111011`
+indicates the site moves.  `(7 4 3 8 5 2 1 6)` becomes `0b11010111`
 
 Reflection about the `x` axis does
 
-      8
-    7 6 5
-    4 3 2
-      1
+      6
+    8 5 2
+    7 4 1
+      3
 
-or `(1 4 3 2 7 6 5 8)` as a permutation and `0b01011010` as a bitmask.
+or `(7 8 3 4 5 6 1 2)` as a permutation and `0b01011010` as a bitmask.
 
 Let us confirm D₄ by working out one repeated application: `ρ σ`
 
-                 5
-      5 2      8 6 3
-    8 6 3 1    2 7 4
-      7 4        1
+                 2
+      2 1      6 5 4
+    6 5 4 3    1 8 7
+      8 7        3
 
-or `(1 2 7 4 8 6 3 5)` as a permutation.  We can easily verify that this equals the product of
-`(1 4 7 2 3 6 8 5)(1 4 3 2 7 6 5 8)` by following the orbit of each site:
+or `(1 6 3 8 5 2 7 4)` as a permutation.  We can easily verify that this equals the product of
+`(7 4 3 8 5 2 1 6)(7 8 3 4 5 6 1 2)` by following the orbit of each site:
 
-    1 → 1 → 1
-    2 → 4 → 2
-    3 → 3 → 7
-    4 → 2 → 4
-    5 → 7 → 8
-    6 → 6 → 6
-    7 → 5 → 3
-    8 → 8 → 5
+    1 → 7 → 1
+    2 → 8 → 6
+    3 → 3 → 3
+    4 → 4 → 8
+    5 → 5 → 5
+    6 → 6 → 2
+    7 → 1 → 7
+    8 → 2 → 4
 
 ```jldoctest
 julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare{8}())]
-7-element Vector{Vector{Int64}}:
+8-element Vector{Vector{Int64}}:
  [0, 0, 0, 0, 0, 0, 0, 0]
- [0, 1, 1, 1, 1, 0, 1, 1]
- [0, 0, 1, 0, 1, 0, 1, 1]
- [0, 1, 1, 1, 1, 0, 1, 1]
- [0, 0, 1, 0, 1, 0, 1, 1]
- [0, 1, 1, 1, 0, 0, 0, 1]
- [0, 0, 1, 0, 1, 0, 1, 1]
+ [1, 1, 0, 1, 0, 1, 1, 1]
+ [0, 1, 0, 1, 0, 1, 0, 1]
+ [1, 1, 0, 1, 0, 1, 1, 1]
+ [1, 1, 0, 0, 0, 0, 1, 1]
+ [0, 1, 0, 1, 0, 1, 0, 1]
+ [1, 0, 0, 1, 0, 1, 1, 0]
+ [0, 1, 0, 1, 0, 1, 0, 1]
 
 ```
 """
 function symmetries(s::TiltedSquare)::Vector{Int}
     mask(r) = reduce((a, b) -> a << 1 | b, (a ≠ b for (a, b) ∈ Iterators.reverse(enumerate(findall(r, s)))))
-    return [mask(r) for r ∈ [SA[1 0; 0 1], ρ, ρ^2, ρ^3, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
+    return [mask(r) for r ∈ [SA[1 0; 0 1], ρ, ρ^2, ρ^3, σ, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
 """
@@ -271,13 +270,13 @@ julia> [index(parse(Int, b, base = 2), c) for b ∈ ["0011", "0101", "0110", "10
 function index(m::Integer, c::Matrix)::Integer
     i = 1
     @inbounds for k ∈ 1:size(c, 2)
-        i += c[trailing_zeros(m) + 1, k]
+        i += c[trailing_zeros(m)+1, k]
         m &= m - 1
     end
     return i
 end
 
-index(n::Tuple{Int, Int}, c::Matrix) = CartesianIndex(Tuple(index(m, c) for m ∈ n))
+index(n::Tuple{Int,Int}, c::Matrix) = CartesianIndex(Tuple(index(m, c) for m ∈ n))
 
 """
     mask(i, c)
@@ -330,7 +329,7 @@ as a [mutating linear map](https://github.com/Jutho/LinearMaps.jl).
 # Examples
 ```jldoctest
 julia> h = hamiltonian(8, 4, 1., 4.)
-3414×3414 LinearMaps.FunctionMap{Float64}(mult!; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
+3024×3024 LinearMaps.FunctionMap{Float64}(mult!; ismutating=true, issymmetric=true, ishermitian=true, isposdef=false)
 
 julia> using Arpack: eigs
 
@@ -338,15 +337,15 @@ julia> λ, ϕ = eigs(h, nev=1, which=:SR);
 
 julia> λ
 1-element Vector{Float64}:
- -11.859367228698792
+ -11.652313479748669
 
 julia> size(ϕ)
-(3414, 1)
+(3024, 1)
 
 ```
 """
-function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
-    c = [binomial(i, j) for i=0:(n-1), j=1:k]
+function hamiltonian(n::Integer, k::Integer, t::T, U::T) where {T<:Real}
+    c = [binomial(i, j) for i = 0:(n-1), j = 1:k]
     nCk = binomial(n, k)
     s = TiltedSquare{n}()
     hop = hops(s)
@@ -388,7 +387,7 @@ function hamiltonian(n::Integer, k::Integer, t::T, U::T) where T <: Real
             end
         end
     end
-    return FunctionMap{T}(mult!, length(uniquepairs), ismutating=true, issymmetric=true)
+    return FunctionMap{T}(mult!, length(uniquepairs), ismutating = true, issymmetric = true)
 end
 
 end
