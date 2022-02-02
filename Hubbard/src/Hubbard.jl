@@ -241,7 +241,7 @@ julia> [digits(s, base = 2, pad = 8) for s ∈ symmetries(TiltedSquare{8}())]
 ```
 """
 function symmetries(s::TiltedSquare)::Vector{Int}
-    mask(r) = mapreduce(Base.splat(≠), (a, b) -> a << 1 | b, Iterators.reverse(enumerate(findall(r, s))))
+    mask(r) = evalpoly(2, map(Base.splat(≠), enumerate(findall(r, s))))
     return [mask(r) for r ∈ [SA[1 0; 0 1], ρ, ρ^2, ρ^3, σ, ρ * σ, ρ^2 * σ, ρ^3 * σ]]
 end
 
