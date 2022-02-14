@@ -6,6 +6,7 @@ export TiltedSquare, hamiltonian, hops, index, mask, symmetries, ρ
 
 const ρ = SA[0 -1; 1 0]  # Rotation by `½π`
 const σ = SA[-1 0; 0 1]  # Reflection about `x` axis
+const sum2 = Base.Fix1(sum, abs2)
 
 """
 An integer greater than one can be written as a sum of two squares if and only if
@@ -31,19 +32,19 @@ function istwosquares(n::Int)::Bool
 end
 
 """
-    restrict(x, tilt)
+    restrict(tilt)
 
 Apply https://en.wikipedia.org/wiki/Periodic_boundary_conditions to restrict point `x`
 within the `tilt × ρ * tilt` titled square
 """
-function restrict(x::SVector{2,Int}, tilt::SVector{2,Int})::SVector{2,Int}
-    n = sum(abs2, tilt)
-    reduce([tilt, ρ * tilt], init = x) do u, v
-        u - v * fld(u'v, n)
+restrict(tilt::SVector{2,Int}) =
+    Base.Fix2(tilt) do x, tilt
+        n = sum2(tilt)
+        reduce([tilt, ρ * tilt], init = x) do u, v
+            u - v * fld(u'v, n)
+        end
     end
-end
 
-restrict(tilt::SVector{2,Int}) = Base.Fix2(restrict, tilt)
 
 """
     TiltedSquare
@@ -56,10 +57,9 @@ struct TiltedSquare{N}
 
     function TiltedSquare{N}() where {N}
         istwosquares(N) || throw(DomainError("$n is not a sum of two squares"))
-        pred = ==(N) ∘ Base.Fix1(sum, abs2)
-        tilt = first(t for t ∈ (SVector(isqrt(N - v^2), v) for v ∈ 0:isqrt(N ÷ 2)) if pred(t))
+        tilt = first(Iterators.filter(==(N) ∘ sum2, SA[isqrt(N - v^2), v] for v ∈ 0:isqrt(N ÷ 2)))
         pred = isequal ∘ restrict(tilt)
-        sites = [site for site ∈ (SVector(x, y) for x ∈ -tilt[2]:tilt[1] for y ∈ 0:sum(tilt)) if pred(site)(site)]
+        sites = [site for site ∈ (SA[x, y] for x ∈ -tilt[2]:tilt[1] for y ∈ 0:sum(tilt)) if pred(site)(site)]
         return new(tilt, SVector{N,SVector{2,Int}}(sites))
     end
 end
@@ -138,7 +138,7 @@ julia> findall(SA[1, 0], TiltedSquare{8}())
 
 """
 function Base.findall(d::SVector{2,Int}, s::TiltedSquare)::Vector{Int}
-    invperm(collect(sortperm(s.sites, by = restrict(s.tilt) ∘ Base.Fix2(+, d))))
+    invperm(collect(sortperm(s.sites, by = restrict(s.tilt) ∘ Base.Fix1(+, d))))
 end
 
 """
@@ -171,7 +171,7 @@ julia> [digits(h, base = 2, pad = 8) for h ∈ hops(TiltedSquare{8}())]
 ```
 """
 function hops(s::TiltedSquare)::Vector{Int}
-    masks(y) = [(1 << (i - 1)) | (1 << (j - 1)) for (i, j) in enumerate(findall(y, s))]
+    masks(y) = [(1 << (i - 1)) | (1 << (j - 1)) for (i, j) ∈ enumerate(findall(y, s))]
     return [masks(SA[1, 0]); masks(SA[0, 1])]
 end
 
