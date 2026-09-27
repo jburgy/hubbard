@@ -18,7 +18,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
