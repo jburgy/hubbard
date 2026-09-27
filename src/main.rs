@@ -39,7 +39,7 @@ struct Args {
     #[arg(long, value_enum, default_value_t = Irrep::A1)]
     irrep: Irrep,
     /// Try every sector with real characters and report the lowest energy
-    #[arg(long)]
+    #[arg(long, conflicts_with_all = ["momentum", "irrep"])]
     all_sectors: bool,
     /// Ignore symmetries: one sector holding every configuration
     #[arg(long, conflicts_with_all = ["momentum", "irrep", "all_sectors"])]
