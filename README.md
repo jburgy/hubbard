@@ -41,4 +41,4 @@ The search is restricted to one symmetry sector, chosen with `--momentum gamma|m
 cargo test
 ```
 
-compares against dense diagonalization of small clusters, both in the full basis and projected onto every symmetry sector, against exact noninteracting and atomic limits, and against published exact energies of 2×2, 3×3 and 4×4 clusters (H. Shi and S. Zhang, Phys. Rev. B **88**, 125132).  Tests are compiled with optimizations; the 4×4 comparisons make the suite take about three minutes.
+compares against dense diagonalization of small clusters, both in the full basis and projected onto every symmetry sector, against exact noninteracting and atomic limits, and against published exact energies of 2×2, 3×3 and 4×4 clusters (H. Shi and S. Zhang, Phys. Rev. B **88**, 125132).  Tests are compiled with optimizations; the 4×4 comparisons make the suite take about three minutes, so CI skips them.
