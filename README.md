@@ -29,10 +29,16 @@ The search is restricted to one symmetry sector, chosen with `--momentum gamma|m
 * States are symmetrized under translations and the point group (rotations always, reflections when the cluster is not chiral).  Symmetries act on the spin up configuration first, so bookkeeping scales with $\binom{N}{N_\uparrow}$ rather than with the dimension.
 * Configurations are ranked with the combinatorial number system split into two lookup tables (H. Q. Lin, Phys. Rev. B **42**, 6561).
 
+## How it stays fast
+
+* Threads take whole blocks of states sharing a spin up representative and walk their spin down configurations in order, instead of decoding every row from its index.
+* Hops are enumerated one lattice direction at a time with bit operations (occupied sites whose neighbour is empty), instead of testing every bond with an unpredictable branch.
+* Spin up representatives fixed by a nontrivial symmetry get a lookup table from spin down rank to basis index and sign, instead of scanning their stabilizer on every hop.  This costs a few percent of the vector memory, a share that shrinks as clusters grow.
+
 ## Tests
 
 ```sh
 cargo test
 ```
 
-compares against dense diagonalization of small clusters, both in the full basis and projected onto every symmetry sector, against exact noninteracting and atomic limits, and against published exact energies of 2×2, 3×3 and 4×4 clusters (H. Shi and S. Zhang, Phys. Rev. B **88**, 125132).
+compares against dense diagonalization of small clusters, both in the full basis and projected onto every symmetry sector, against exact noninteracting and atomic limits, and against published exact energies of 2×2, 3×3 and 4×4 clusters (H. Shi and S. Zhang, Phys. Rev. B **88**, 125132).  Tests are compiled with optimizations; the 4×4 comparisons make the suite take about three minutes.
