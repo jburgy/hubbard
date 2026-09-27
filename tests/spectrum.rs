@@ -5,15 +5,15 @@ use nalgebra::{DMatrix, SymmetricEigen};
 use hubbard::basis::{Basis, permute};
 use hubbard::hamiltonian::Hamiltonian;
 use hubbard::lanczos::{ground_state, lanczos, residual};
-use hubbard::lattice::TiltedSquare;
+use hubbard::lattice::{Irrep, Momentum, Symmetry, TiltedSquare};
 
-fn identity(sites: usize) -> Vec<Vec<u8>> {
-    vec![(0..sites as u8).collect()]
+fn identity(sites: usize) -> Vec<Symmetry> {
+    vec![((0..sites as u8).collect(), false)]
 }
 
 fn hamiltonian(
     lattice: &TiltedSquare,
-    group: Vec<Vec<u8>>,
+    group: Vec<Symmetry>,
     up: u32,
     down: u32,
     t: f64,
@@ -40,17 +40,17 @@ fn lowest(matrix: DMatrix<f64>) -> f64 {
     SymmetricEigen::new(matrix).eigenvalues.min()
 }
 
-/// Projector onto fully symmetric states, in the basis of all configurations.
-fn projector(group: &[Vec<u8>], full: &Basis) -> DMatrix<f64> {
+/// Projector `Σ_g χ(g) ρ(g) / |G|` onto the sector, in the basis of all configurations.
+fn projector(group: &[Symmetry], full: &Basis) -> DMatrix<f64> {
     let n = full.dimension();
     let mut p = DMatrix::zeros(n, n);
     for a in 0..n {
         let (up, down, _) = full.state(a);
-        for g in group {
+        for (g, character_negative) in group {
             let (up, up_negative) = permute(g, up);
             let (down, down_negative) = permute(g, down);
             let (b, _, _) = full.find(up, down).unwrap();
-            let sign = if up_negative == down_negative { 1.0 } else { -1.0 };
+            let sign = if up_negative ^ down_negative ^ character_negative { -1.0 } else { 1.0 };
             p[(b, a)] += sign / group.len() as f64;
         }
     }
@@ -78,26 +78,36 @@ const CASES: [(usize, u32, u32); 8] =
     [(2, 1, 1), (4, 2, 1), (4, 2, 2), (5, 2, 2), (8, 2, 1), (8, 2, 2), (9, 2, 1), (10, 1, 2)];
 
 #[test]
-fn symmetric_sector_matches_projection_of_full_hamiltonian() {
+fn every_sector_matches_projection_of_full_hamiltonian() {
     for (sites, up, down) in CASES {
         let lattice = TiltedSquare::new(sites).unwrap();
-        let group = lattice.symmetries();
         let full = hamiltonian(&lattice, identity(sites), up, down, 1.0, 4.0);
-        let symmetric = hamiltonian(&lattice, group.clone(), up, down, 1.0, 4.0);
+        let full_dense = dense(&full);
+        let full_basis = Basis::new(identity(sites), up, down);
+        for momentum in [Momentum::Gamma, Momentum::M] {
+            for irrep in [Irrep::A1, Irrep::A2, Irrep::B1, Irrep::B2] {
+                let Ok(group) = lattice.symmetries(momentum, irrep) else { continue };
+                let label = format!("{sites} {up} {down} {momentum:?} {irrep:?}");
+                let sector = hamiltonian(&lattice, group.clone(), up, down, 1.0, 4.0);
 
-        let p = projector(&group, &Basis::new(identity(sites), up, down));
-        assert!((p.trace() - symmetric.dimension() as f64).abs() < 1e-9, "{sites} {up} {down}");
+                let p = projector(&group, &full_basis);
+                assert!((p.trace() - sector.dimension() as f64).abs() < 1e-9, "{label}");
+                if sector.dimension() == 0 {
+                    continue;
+                }
 
-        let h = dense(&symmetric);
-        assert!((&h - h.transpose()).amax() < 1e-12, "{sites} {up} {down}");
+                let h = dense(&sector);
+                assert!((&h - h.transpose()).amax() < 1e-12, "{label}");
 
-        let identity = DMatrix::identity(p.nrows(), p.ncols());
-        let restricted = &p * dense(&full) * &p + (identity - &p) * 1e3;
-        let expected = lowest(restricted);
-        assert!((lowest(h) - expected).abs() < 1e-10, "{sites} {up} {down}");
+                let identity = DMatrix::identity(p.nrows(), p.ncols());
+                let restricted = &p * &full_dense * &p + (identity - &p) * 1e3;
+                let expected = lowest(restricted);
+                assert!((lowest(h) - expected).abs() < 1e-10, "{label}");
 
-        let energy = lanczos(&symmetric, 1e-10, 500).unwrap().energy;
-        assert!((energy - expected).abs() < 1e-9, "{sites} {up} {down}");
+                let energy = lanczos(&sector, 1e-10, 500).unwrap().energy;
+                assert!((energy - expected).abs() < 1e-9, "{label}");
+            }
+        }
     }
 }
 
@@ -138,7 +148,8 @@ fn atomic_limit_minimizes_double_occupancy() {
 #[test]
 fn replayed_ground_state_is_an_eigenvector() {
     let lattice = TiltedSquare::new(10).unwrap();
-    let h = hamiltonian(&lattice, lattice.symmetries(), 5, 5, 1.0, 4.0);
+    let group = lattice.symmetries(Momentum::Gamma, Irrep::A1).unwrap();
+    let h = hamiltonian(&lattice, group, 5, 5, 1.0, 4.0);
     let result = lanczos(&h, 1e-10, 500).unwrap();
     let psi = ground_state(&h, &result).unwrap();
     let (deviation, energy) = residual(&h, &psi).unwrap();
@@ -153,7 +164,7 @@ fn replayed_ground_state_is_an_eigenvector() {
 /// The 4×4 value at (5, 5, 4) also appears as -1.2238 in S. Zhang, J. Carlson and
 /// J. E. Gubernatis, Phys. Rev. B 55, 7464 (1997), https://arxiv.org/abs/cond-mat/9607062.
 fn assert_matches_shi_zhang(
-    group: fn(&TiltedSquare) -> Vec<Vec<u8>>,
+    group: fn(&TiltedSquare) -> Vec<Symmetry>,
     cases: &[(usize, u32, u32, f64, &str)],
 ) {
     for &(sites, up, down, u, reference) in cases {
@@ -191,7 +202,7 @@ fn small_clusters_match_shi_zhang() {
 #[test]
 fn fully_symmetric_ground_states_match_shi_zhang() {
     assert_matches_shi_zhang(
-        TiltedSquare::symmetries,
+        |lattice| lattice.symmetries(Momentum::Gamma, Irrep::A1).unwrap(),
         &[
             (16, 5, 5, 4.0, "-1.22381"),
             (16, 5, 5, 8.0, "-1.0944"),
@@ -202,6 +213,22 @@ fn fully_symmetric_ground_states_match_shi_zhang() {
             // Printed without its minus sign in the table.
             (16, 8, 8, 8.0, "-0.5293"),
             (16, 8, 8, 12.0, "-0.3745"),
+        ],
+    );
+}
+
+/// Fillings whose ground state Shi and Zhang find in the B₁ irrep at zero momentum.
+/// (6, 6, 4) is omitted: we get -1.108098 per site, which the table prints as -1.1080.
+#[test]
+fn d_wave_ground_states_match_shi_zhang() {
+    assert_matches_shi_zhang(
+        |lattice| lattice.symmetries(Momentum::Gamma, Irrep::B1).unwrap(),
+        &[
+            (16, 7, 7, 4.0, "-0.9840"),
+            (16, 7, 7, 6.0, "-0.8388"),
+            (16, 7, 7, 8.0, "-0.7418"),
+            (16, 7, 7, 10.0, "-0.6754"),
+            (16, 7, 7, 12.0, "-0.6282"),
         ],
     );
 }
