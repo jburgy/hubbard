@@ -13,13 +13,15 @@ cargo run --release -- --sites 16 --up 8 --down 8 -t 1 -U 4
 ```
 
 ```
-lattice    16 sites, tilt [4, 0], 128 symmetries
-basis      1297076 states, 19.8 MiB for 2 vectors
+lattice    16 sites, tilt [4, 0]
+basis      1297076 states, 128 symmetries, 19.8 MiB for 2 vectors
 lanczos    79 iterations, residual 8.7e-9
 energy     -13.621854821163 (-0.851365926323 per site)
 ```
 
-`--sites` must be a sum of two squares $u^2 + v^2 \le 32$: the lattice is the square with sides $(u, v)$ and $(-v, u)$ with periodic boundary conditions.  `--eigenvector` also builds the ground state to check it and report double occupancy, and `--full-basis` searches every symmetry sector instead of only the fully symmetric one.
+`--sites` must be a sum of two squares $u^2 + v^2 \le 32$: the lattice is the square with sides $(u, v)$ and $(-v, u)$ with periodic boundary conditions.  `--eigenvector` also builds the ground state to check it and report double occupancy.
+
+The search is restricted to one symmetry sector, chosen with `--momentum gamma|m` (crystal momentum $(0, 0)$ or $(\pi, \pi)$) and `--irrep a1|a2|b1|b2` (point group irrep, B₁ being $d_{x^2-y^2}$); the default is the fully symmetric `gamma a1`.  `--all-sectors` tries each of them in turn and reports the lowest, and `--full-basis` ignores symmetries altogether.
 
 ## How memory is kept small
 
@@ -33,4 +35,4 @@ energy     -13.621854821163 (-0.851365926323 per site)
 cargo test
 ```
 
-compares against dense diagonalization of small clusters, both in the full basis and projected onto the fully symmetric sector, and against exact noninteracting and atomic limits.
+compares against dense diagonalization of small clusters, both in the full basis and projected onto every symmetry sector, against exact noninteracting and atomic limits, and against published exact energies of 2×2, 3×3 and 4×4 clusters (H. Shi and S. Zhang, Phys. Rev. B **88**, 125132).

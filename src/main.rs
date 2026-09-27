@@ -7,7 +7,7 @@ use clap::Parser;
 use hubbard::basis::Basis;
 use hubbard::hamiltonian::Hamiltonian;
 use hubbard::lanczos::{ground_state, lanczos, residual};
-use hubbard::lattice::TiltedSquare;
+use hubbard::lattice::{Irrep, Momentum, Symmetry, TiltedSquare};
 
 /// Ground state of the Hubbard model on a tilted square lattice with periodic boundaries.
 #[derive(Parser)]
@@ -32,8 +32,17 @@ struct Args {
     tolerance: f64,
     #[arg(long, default_value_t = 1000)]
     max_iterations: usize,
-    /// Search every symmetry sector instead of only the fully symmetric one
-    #[arg(long)]
+    /// Crystal momentum of the symmetry sector
+    #[arg(long, value_enum, default_value_t = Momentum::Gamma)]
+    momentum: Momentum,
+    /// Point group irrep of the symmetry sector
+    #[arg(long, value_enum, default_value_t = Irrep::A1)]
+    irrep: Irrep,
+    /// Try every sector with real characters and report the lowest energy
+    #[arg(long, conflicts_with_all = ["momentum", "irrep"])]
+    all_sectors: bool,
+    /// Ignore symmetries: one sector holding every configuration
+    #[arg(long, conflicts_with_all = ["momentum", "irrep", "all_sectors"])]
     full_basis: bool,
     /// Also build the ground state (one more vector) to verify it and measure double occupancy
     #[arg(long)]
@@ -63,23 +72,49 @@ fn run(args: Args) -> Result<(), String> {
         ));
     }
 
-    let group =
-        if args.full_basis { vec![(0..args.sites as u8).collect()] } else { lattice.symmetries() };
+    println!("lattice    {} sites, tilt {:?}", args.sites, lattice.tilt());
+
+    if args.full_basis {
+        let identity = vec![((0..args.sites as u8).collect(), false)];
+        solve(&args, &lattice, identity)?.ok_or("no states with these fillings")?;
+    } else if args.all_sectors {
+        let mut lowest: Option<(f64, String)> = None;
+        for momentum in [Momentum::Gamma, Momentum::M] {
+            for irrep in [Irrep::A1, Irrep::A2, Irrep::B1, Irrep::B2] {
+                if lattice.is_chiral() && matches!(irrep, Irrep::A2 | Irrep::B2) {
+                    continue;
+                }
+                let Ok(group) = lattice.symmetries(momentum, irrep) else { continue };
+                println!("sector     {momentum:?} {irrep:?}");
+                if let Some(energy) = solve(&args, &lattice, group)?
+                    && lowest.as_ref().is_none_or(|(e, _)| energy < *e)
+                {
+                    lowest = Some((energy, format!("{momentum:?} {irrep:?}")));
+                }
+            }
+        }
+        let (energy, sector) = lowest.ok_or("no states with these fillings")?;
+        println!("lowest     {energy:.12} in {sector}");
+    } else {
+        let group = lattice.symmetries(args.momentum, args.irrep)?;
+        solve(&args, &lattice, group)?.ok_or("no states of this symmetry with these fillings")?;
+    }
+    println!("time       {:.2?}", start.elapsed());
+    Ok(())
+}
+
+/// Ground state energy within the sector spanned by `group`, or `None` if the sector is empty.
+fn solve(args: &Args, lattice: &TiltedSquare, group: Vec<Symmetry>) -> Result<Option<f64>, String> {
     let basis = Basis::new(group, args.up, args.down);
     let dimension = basis.dimension();
     let vectors = if args.eigenvector { 3 } else { 2 };
     println!(
-        "lattice    {} sites, tilt {:?}, {} symmetries",
-        args.sites,
-        lattice.tilt(),
-        basis.group_order()
-    );
-    println!(
-        "basis      {dimension} states, {} for {vectors} vectors",
+        "basis      {dimension} states, {} symmetries, {} for {vectors} vectors",
+        basis.group_order(),
         bytes(vectors * dimension * 8)
     );
     if dimension == 0 {
-        return Err("no fully symmetric state exists with these fillings".into());
+        return Ok(None);
     }
 
     let h = Hamiltonian::new(basis, &lattice.neighbors(), args.hopping, args.interaction);
@@ -94,8 +129,7 @@ fn run(args: Args) -> Result<(), String> {
         println!("⟨ψ|H|ψ⟩    {energy:.12}, ‖Hψ - Eψ‖ {deviation:.1e}");
         println!("⟨n↑n↓⟩     {:.12} per site", h.double_occupancy(&psi) / n);
     }
-    println!("time       {:.2?}", start.elapsed());
-    Ok(())
+    Ok(Some(result.energy))
 }
 
 fn out_of_memory(error: TryReserveError) -> String {

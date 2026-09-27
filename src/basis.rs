@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use crate::combinations::Combinations;
+use crate::lattice::Symmetry;
 
 /// Image of the occupation `mask` under the site permutation `image`, and whether reordering
 /// the creation operators into increasing site order flips the sign.
@@ -16,7 +17,8 @@ pub fn permute(image: &[u8], mut mask: u32) -> (u32, bool) {
     (result, inversions & 1 == 1)
 }
 
-/// How a spin up configuration maps onto its orbit representative.
+/// How a spin up configuration maps onto its orbit representative; `negative` includes the
+/// character of `element`.
 struct Orbit {
     rep: u32,
     element: u16,
@@ -33,6 +35,7 @@ struct Rep {
     up: u32,
     offset: usize,
     len: usize,
+    /// Elements fixing `up`, and whether they flip its sign (character included).
     stabilizer: Vec<(u16, bool)>,
     downs: Vec<u32>,
     weights: Vec<f64>,
@@ -45,12 +48,13 @@ impl Rep {
     }
 }
 
-/// Fully symmetric states `Σ_g g|up, down⟩ / √(|G| |stabilizer|)`, one per orbit.
+/// Symmetry adapted states `Σ_g χ(g) g|up, down⟩ / √(|G| |stabilizer|)`, one per orbit, for
+/// real characters `χ(g) = ±1`.
 ///
 /// Symmetries act on the spin up configuration first, so auxiliary storage scales
 /// with the number of spin up configurations rather than with the dimension.
 pub struct Basis {
-    group: Vec<Vec<u8>>,
+    group: Vec<Symmetry>,
     up: Combinations,
     down: Combinations,
     orbits: Vec<Orbit>,
@@ -59,8 +63,9 @@ pub struct Basis {
 }
 
 impl Basis {
-    pub fn new(group: Vec<Vec<u8>>, up: u32, down: u32) -> Self {
-        let sites = group[0].len() as u32;
+    /// `group` must start with the identity.
+    pub fn new(group: Vec<Symmetry>, up: u32, down: u32) -> Self {
+        let sites = group[0].0.len() as u32;
         let mut basis = Basis {
             group,
             up: Combinations::new(sites, up),
@@ -114,19 +119,19 @@ impl Basis {
     }
 
     fn smallest_image(&self, up: u32) -> (u32, u16, bool) {
-        let images = self.group.iter().enumerate().map(|(i, g)| {
+        let images = self.group.iter().enumerate().map(|(i, (g, character_negative))| {
             let (image, negative) = permute(g, up);
-            (image, i as u16, negative)
+            (image, i as u16, negative ^ character_negative)
         });
         images.min_by_key(|&(image, _, _)| image).unwrap()
     }
 
     fn new_rep(&self, up: u32) -> Rep {
         let mut stabilizer = Vec::new();
-        for (i, g) in self.group.iter().enumerate() {
+        for (i, (g, character_negative)) in self.group.iter().enumerate() {
             let (image, negative) = permute(g, up);
             if image == up {
-                stabilizer.push((i as u16, negative));
+                stabilizer.push((i as u16, negative ^ character_negative));
             }
         }
         let mut rep = Rep {
@@ -155,7 +160,7 @@ impl Basis {
 
     fn lookup_entry(&self, rep: &Rep, down: u32) -> i32 {
         let images = rep.stabilizer.iter().map(|&(g, up_negative)| {
-            let (image, down_negative) = permute(&self.group[g as usize], down);
+            let (image, down_negative) = permute(&self.group[g as usize].0, down);
             (image, up_negative ^ down_negative)
         });
         let (image, negative) = images.min_by_key(|&(image, _)| image).unwrap();
@@ -171,7 +176,7 @@ impl Basis {
     fn stabilizer_size(&self, rep: &Rep, down: u32) -> Option<usize> {
         let mut size = 0;
         for &(g, up_negative) in &rep.stabilizer {
-            let (image, negative) = permute(&self.group[g as usize], down);
+            let (image, negative) = permute(&self.group[g as usize].0, down);
             if image < down || (image == down && negative != up_negative) {
                 return None;
             }
@@ -197,7 +202,7 @@ impl Basis {
         let (down, down_negative) = if orbit.element == 0 {
             (down, false)
         } else {
-            permute(&self.group[orbit.element as usize], down)
+            permute(&self.group[orbit.element as usize].0, down)
         };
         let negative = orbit.negative ^ down_negative;
         let rep = &self.reps[orbit.rep as usize];
@@ -229,7 +234,7 @@ mod tests {
 
     #[test]
     fn identity_group_spans_every_configuration() {
-        let basis = Basis::new(vec![(0..6).collect()], 2, 3);
+        let basis = Basis::new(vec![((0..6).collect(), false)], 2, 3);
         assert_eq!(basis.dimension(), 15 * 20);
         for index in 0..basis.dimension() {
             let (up, down, weight) = basis.state(index);

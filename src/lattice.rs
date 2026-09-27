@@ -17,18 +17,49 @@ fn multiply(a: Matrix, b: Matrix) -> Matrix {
     [[c0[0], c1[0]], [c0[1], c1[1]]]
 }
 
-/// The eight elements of the dihedral group D₄: ρᵏ and ρᵏσ.
-fn point_group() -> Vec<Matrix> {
+/// The eight elements ρᵏσᵐ of the dihedral group D₄, with the parities of `k` and `m`.
+fn point_group() -> Vec<(Matrix, bool, bool)> {
     let mut group = Vec::with_capacity(8);
-    for reflection in [IDENTITY, SIGMA] {
+    for (reflection, reflected) in [(IDENTITY, false), (SIGMA, true)] {
         let mut rotation = IDENTITY;
-        for _ in 0..4 {
-            group.push(multiply(rotation, reflection));
+        for k in 0..4 {
+            group.push((multiply(rotation, reflection), k % 2 == 1, reflected));
             rotation = multiply(RHO, rotation);
         }
     }
     group
 }
+
+/// Crystal momenta whose Bloch phases are all real.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum Momentum {
+    Gamma,
+    M,
+}
+
+/// One-dimensional irreps of C₄ᵥ, labelled as for d orbitals: B₁ is x² - y², B₂ is xy.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum Irrep {
+    A1,
+    A2,
+    B1,
+    B2,
+}
+
+impl Irrep {
+    /// Whether the character of a quarter turn, and of the reflection `SIGMA`, is -1.
+    fn odd(self) -> (bool, bool) {
+        match self {
+            Irrep::A1 => (false, false),
+            Irrep::A2 => (false, true),
+            Irrep::B1 => (true, false),
+            Irrep::B2 => (true, true),
+        }
+    }
+}
+
+/// A site permutation and whether its character is -1.
+pub type Symmetry = (Vec<u8>, bool);
 
 /// Square lattice with periodic boundary conditions along `tilt` and `ρ tilt`.
 ///
@@ -110,16 +141,39 @@ impl TiltedSquare {
         [[u, v], [-v, u]].into_iter().all(|w| self.restrict(apply(r, w)) == [0, 0])
     }
 
-    /// Distinct site permutations of the space group, identity first.
-    pub fn symmetries(&self) -> Vec<Vec<u8>> {
-        let mut group: Vec<Vec<u8>> = point_group()
-            .into_iter()
-            .filter(|&r| self.preserves_periodicity(r))
-            .flat_map(|r| self.sites.iter().map(move |&d| self.permutation(r, d)))
-            .collect();
+    /// Chiral clusters have no reflections, so A₂ coincides with A₁ and B₂ with B₁.
+    pub fn is_chiral(&self) -> bool {
+        !self.preserves_periodicity(SIGMA)
+    }
+
+    /// Distinct space group elements `x ↦ r x + d`, identity first, with the characters of
+    /// the irrep `irrep` at crystal momentum `momentum`.
+    pub fn symmetries(&self, momentum: Momentum, irrep: Irrep) -> Result<Vec<Symmetry>, String> {
+        let [u, v] = self.tilt;
+        let staggered = matches!(momentum, Momentum::M);
+        if staggered && (u + v) % 2 == 1 {
+            return Err("momentum (π, π) does not fit this cluster".into());
+        }
+        let (odd_turn, odd_reflection) = irrep.odd();
+        let mut group = Vec::new();
+        for (r, turned, reflected) in point_group() {
+            if !self.preserves_periodicity(r) {
+                continue;
+            }
+            let point_negative = (turned && odd_turn) ^ (reflected && odd_reflection);
+            for &d in &self.sites {
+                let phase_negative = staggered && (d[0] + d[1]) % 2 != 0;
+                group.push((self.permutation(r, d), point_negative ^ phase_negative));
+            }
+        }
         group.sort();
         group.dedup();
-        group
+        if group.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+            return Err(format!(
+                "{irrep:?} at {momentum:?} is not a representation on this cluster"
+            ));
+        }
+        Ok(group)
     }
 }
 
@@ -145,9 +199,36 @@ mod tests {
     #[test]
     fn chiral_clusters_lack_reflections() {
         for (n, order) in [(5, 20), (8, 64), (9, 72), (10, 40), (16, 128), (18, 144), (20, 80)] {
-            let group = TiltedSquare::new(n).unwrap().symmetries();
+            let lattice = TiltedSquare::new(n).unwrap();
+            let group = lattice.symmetries(Momentum::Gamma, Irrep::A1).unwrap();
             assert_eq!(group.len(), order, "{n} sites");
-            assert_eq!(group[0], (0..n as u8).collect::<Vec<_>>());
+            assert_eq!(group[0], ((0..n as u8).collect(), false));
+            assert_eq!(lattice.is_chiral(), order == 4 * n);
+        }
+    }
+
+    #[test]
+    fn staggered_momentum_needs_an_even_superlattice() {
+        for (n, fits) in [(5, false), (8, true), (9, false), (10, true), (16, true)] {
+            let lattice = TiltedSquare::new(n).unwrap();
+            assert_eq!(lattice.symmetries(Momentum::M, Irrep::B1).is_ok(), fits, "{n} sites");
+        }
+    }
+
+    #[test]
+    fn characters_multiply() {
+        let lattice = TiltedSquare::new(16).unwrap();
+        let compose =
+            |a: &[u8], b: &[u8]| -> Vec<u8> { b.iter().map(|&j| a[j as usize]).collect() };
+        for irrep in [Irrep::A1, Irrep::A2, Irrep::B1, Irrep::B2] {
+            let group = lattice.symmetries(Momentum::M, irrep).unwrap();
+            for (g, g_negative) in &group {
+                for (h, h_negative) in &group {
+                    let product = compose(g, h);
+                    let (_, negative) = group.iter().find(|(p, _)| *p == product).unwrap();
+                    assert_eq!(*negative, g_negative ^ h_negative, "{irrep:?}");
+                }
+            }
         }
     }
 
@@ -156,7 +237,7 @@ mod tests {
         for n in [2, 4, 5, 8, 9, 10, 13, 16] {
             let lattice = TiltedSquare::new(n).unwrap();
             let neighbors = lattice.neighbors();
-            for g in lattice.symmetries() {
+            for (g, _) in lattice.symmetries(Momentum::Gamma, Irrep::A1).unwrap() {
                 let compose =
                     |a: &[u8], b: &[u8]| -> Vec<u8> { b.iter().map(|&j| a[j as usize]).collect() };
                 let mut before: Vec<_> = neighbors.iter().map(|d| compose(d, &g)).collect();
