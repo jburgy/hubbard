@@ -60,7 +60,7 @@ fn add_scaled(y: &mut [f64], s: f64, x: &[f64]) {
 
 /// Plain Lanczos with two vectors: `w ← H v - β w` overwrites the previous basis vector.
 ///
-/// Stops once the Ritz residual drops below `tolerance`.
+/// Stops once the Ritz residual drops below `tolerance`, after at least one iteration.
 pub fn lanczos(
     h: &Hamiltonian,
     tolerance: f64,
@@ -80,7 +80,7 @@ pub fn lanczos(
         let off_diagonal = &result.beta[..result.beta.len() - 1];
         result.energy = lowest_eigenvalue(&result.alpha, off_diagonal);
         result.ritz = lowest_eigenvector(&result.alpha, off_diagonal, result.energy);
-        if result.residual() <= tolerance || result.iterations() == max_iterations {
+        if result.residual() <= tolerance || result.iterations() >= max_iterations {
             return Ok(result);
         }
         scale(&mut w, 1.0 / b);

@@ -52,8 +52,9 @@ fn main() -> ExitCode {
 
 fn run(args: Args) -> Result<(), String> {
     let start = Instant::now();
-    let lattice = TiltedSquare::new(args.sites)
-        .filter(|_| (2..=32).contains(&args.sites))
+    let lattice = Some(args.sites)
+        .filter(|n| (2..=32).contains(n))
+        .and_then(TiltedSquare::new)
         .ok_or(format!("{} sites is not a sum of two squares between 2 and 32", args.sites))?;
     if args.up as usize > args.sites || args.down as usize > args.sites {
         return Err(format!(

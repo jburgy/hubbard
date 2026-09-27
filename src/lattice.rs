@@ -46,9 +46,9 @@ pub struct TiltedSquare {
 }
 
 impl TiltedSquare {
-    /// Fails unless `n` is a sum of two squares.
+    /// Fails unless `n` is a positive sum of two squares.
     pub fn new(n: usize) -> Option<Self> {
-        let n = n as i32;
+        let n = i32::try_from(n).ok().filter(|&n| n > 0)?;
         let v = (0..=n.isqrt()).find(|v| (n - v * v).isqrt().pow(2) + v * v == n)?;
         let u = (n - v * v).isqrt();
         let mut lattice = TiltedSquare { tilt: [u, v], sites: Vec::new() };
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn only_sums_of_two_squares() {
-        let sizes: Vec<usize> = (1..=20).filter(|&n| TiltedSquare::new(n).is_some()).collect();
+        let sizes: Vec<usize> = (0..=20).filter(|&n| TiltedSquare::new(n).is_some()).collect();
         assert_eq!(sizes, [1, 2, 4, 5, 8, 9, 10, 13, 16, 17, 18, 20]);
     }
 
