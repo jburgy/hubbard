@@ -146,3 +146,62 @@ fn replayed_ground_state_is_an_eigenvector() {
     assert!(deviation < 1e-7);
     assert!((0.0..10.0).contains(&h.double_occupancy(&psi)));
 }
+
+/// Exact diagonalization energies per site (sites, N↑, N↓, U with t = 1) from Table I of
+/// H. Shi and S. Zhang, "Symmetry in auxiliary-field quantum Monte Carlo calculations",
+/// Phys. Rev. B 88, 125132 (2013), https://arxiv.org/abs/1307.2147.
+/// The 4×4 value at (5, 5, 4) also appears as -1.2238 in S. Zhang, J. Carlson and
+/// J. E. Gubernatis, Phys. Rev. B 55, 7464 (1997), https://arxiv.org/abs/cond-mat/9607062.
+fn assert_matches_shi_zhang(
+    group: fn(&TiltedSquare) -> Vec<Vec<u8>>,
+    cases: &[(usize, u32, u32, f64, &str)],
+) {
+    for &(sites, up, down, u, reference) in cases {
+        let lattice = TiltedSquare::new(sites).unwrap();
+        let h = hamiltonian(&lattice, group(&lattice), up, down, 1.0, u);
+        let per_site = lanczos(&h, 1e-7, 500).unwrap().energy / sites as f64;
+        let decimals = reference.len() - reference.find('.').unwrap() - 1;
+        let rounding = 0.5 * 10f64.powi(-(decimals as i32));
+        let reference: f64 = reference.parse().unwrap();
+        assert!(
+            (per_site - reference).abs() <= rounding,
+            "{sites} {up} {down} U={u}: {per_site} vs {reference}"
+        );
+    }
+}
+
+#[test]
+fn small_clusters_match_shi_zhang() {
+    assert_matches_shi_zhang(
+        |lattice| identity(lattice.len()),
+        &[
+            (4, 2, 1, 4.0, "-1.60463"),
+            (9, 4, 4, 8.0, "-0.8094"),
+            (16, 2, 2, 4.0, "-0.72064"),
+            (16, 2, 2, 8.0, "-0.7076"),
+            (16, 2, 2, 12.0, "-0.7003"),
+            (16, 3, 3, 4.0, "-0.94600"),
+            (16, 3, 3, 8.0, "-0.9202"),
+            (16, 3, 3, 12.0, "-0.9061"),
+        ],
+    );
+}
+
+/// Only the fillings whose ground state Shi and Zhang find in the A₁ irrep at zero momentum.
+#[test]
+fn fully_symmetric_ground_states_match_shi_zhang() {
+    assert_matches_shi_zhang(
+        TiltedSquare::symmetries,
+        &[
+            (16, 5, 5, 4.0, "-1.22381"),
+            (16, 5, 5, 8.0, "-1.0944"),
+            (16, 5, 5, 12.0, "-1.0284"),
+            (16, 6, 6, 8.0, "-0.9328"),
+            (16, 6, 6, 12.0, "-0.8512"),
+            (16, 8, 8, 4.0, "-0.85137"),
+            // Printed without its minus sign in the table.
+            (16, 8, 8, 8.0, "-0.5293"),
+            (16, 8, 8, 12.0, "-0.3745"),
+        ],
+    );
+}
