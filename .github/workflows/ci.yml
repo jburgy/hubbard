@@ -18,10 +18,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      # Pinned so new clippy lints land deliberately; bump alongside the local toolchain.
-      - run: |
-          rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
-          rustup default 1.96.0
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings

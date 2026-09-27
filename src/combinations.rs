@@ -91,7 +91,7 @@ impl Combinations {
 /// Gosper's hack: the next larger integer with the same number of set bits.
 fn next_combination(mask: u32) -> u32 {
     let mask = mask as u64;
-    let lowest = mask & mask.wrapping_neg();
+    let lowest = mask.isolate_lowest_one();
     let ripple = mask + lowest;
     ((((ripple ^ mask) >> 2) / lowest) | ripple) as u32
 }
